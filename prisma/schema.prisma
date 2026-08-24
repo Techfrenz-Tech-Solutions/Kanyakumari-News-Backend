@@ -1,0 +1,750 @@
+// Kanyakumari News Backend — Prisma schema
+// Target: MySQL / MariaDB (utf8mb4). Tamil text safe.
+// Naming: snake_case in DB, camelCase in Prisma/JS.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────── ENUMS ───────────────────────────
+
+enum UserStatus {
+  active
+  inactive
+}
+
+// 7 roles discovered in Kanyakumari-Admin-Panel/src/data/mockData.js
+enum AdminRole {
+  super_admin            // Super Admin
+  admin                  // Admin
+  editor                 // Editor
+  reporter               // Reporter
+  moderator              // Moderator
+  content_manager        // Content Manager
+  advertisement_manager  // Advertisement Manager
+}
+
+enum GenericStatus {
+  active
+  inactive
+}
+
+enum ArticleStatus {
+  draft
+  pending
+  scheduled
+  published
+}
+
+enum MediaType {
+  image
+  pdf
+}
+
+enum VideoType {
+  youtube
+  vimeo
+}
+
+enum GalleryAlbum {
+  events
+  festivals
+  nature
+  news
+}
+
+enum AdPosition {
+  leaderboard
+  rectangle
+  inline
+  footer
+  popup
+}
+
+enum BreakingStatus {
+  scheduled
+  live
+  ended
+}
+
+enum LiveEventStatus {
+  scheduled
+  live
+  ended
+}
+
+enum CommentStatus {
+  pending
+  approved
+  rejected
+  spam
+}
+
+enum NotificationStatus {
+  draft
+  scheduled
+  sent
+}
+
+enum SocialPlatform {
+  facebook
+  instagram
+  twitter
+  youtube
+  telegram
+}
+
+enum SocialPostStatus {
+  draft
+  scheduled
+  sent
+}
+
+enum JobType {
+  govt
+  private
+  teaching
+  bank
+}
+
+enum ReaderProvider {
+  email
+  otp
+  google
+}
+
+enum EditorRole {
+  chief_editor
+  deputy_editor
+  associate_editor
+  copy_editor
+  sub_editor
+  night_editor
+}
+
+enum EditorDepartment {
+  news_desk
+  features
+  sports
+  politics
+  business
+  cinema
+  technology
+  digital
+}
+
+// ─────────────────────── AUTH / USERS ───────────────────────
+
+model User {
+  id            Int         @id @default(autoincrement())
+  name          String      @db.VarChar(120)
+  email         String      @unique @db.VarChar(190)
+  passwordHash  String      @map("password_hash") @db.VarChar(255)
+  phone         String?     @db.VarChar(30)
+  bio           String?     @db.Text
+  avatarId      Int?        @map("avatar_id")
+  avatar        Media?      @relation("UserAvatar", fields: [avatarId], references: [id], onDelete: SetNull)
+  role          AdminRole   @default(reporter)
+  extraPermissions Json?    @map("extra_permissions")
+  status        UserStatus  @default(active)
+  lastLoginAt   DateTime?   @map("last_login_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  refreshTokens RefreshToken[]
+  uploadedMedia Media[]      @relation("MediaUploadedBy")
+  activityLogs  ActivityLog[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique @map("token_hash") @db.Char(64)
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  ipAddress String?   @map("ip_address") @db.VarChar(45)
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  email     String    @db.VarChar(190)
+  tokenHash String    @unique @map("token_hash") @db.Char(64)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([email])
+  @@map("password_reset_tokens")
+}
+
+model ReaderAccount {
+  id           Int            @id @default(autoincrement())
+  email        String?        @unique @db.VarChar(190)
+  phone        String?        @unique @db.VarChar(30)
+  passwordHash String?        @map("password_hash") @db.VarChar(255)
+  name         String?        @db.VarChar(120)
+  provider     ReaderProvider @default(email)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  comments Comment[]
+
+  @@map("reader_accounts")
+}
+
+model OtpCode {
+  id         Int       @id @default(autoincrement())
+  phone      String    @db.VarChar(30)
+  codeHash   String    @map("code_hash") @db.Char(64)
+  attempts   Int       @default(0)
+  expiresAt  DateTime  @map("expires_at")
+  consumedAt DateTime? @map("consumed_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([phone, createdAt])
+  @@map("otp_codes")
+}
+
+// ──────────────────────── TAXONOMY ────────────────────────
+
+model Category {
+  id          Int            @id @default(autoincrement())
+  name        String         @unique @db.VarChar(120)
+  slug        String         @unique @db.VarChar(150)
+  status      GenericStatus  @default(active)
+  sortOrder   Int            @default(0) @map("sort_order")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  subcategories Subcategory[]
+  articles      Article[]
+  videos        Video[]
+  galleries     Gallery[]
+  breakingNews  BreakingNews[] @relation("BreakingCategory")
+  liveEvents    LiveEvent[]
+
+  @@map("categories")
+}
+
+// Canonical subcategory table (replaces the admin's CSV-on-category duplication)
+model Subcategory {
+  id               Int            @id @default(autoincrement())
+  name             String         @unique @db.VarChar(120)
+  slug             String         @db.VarChar(150)
+  parentCategoryId Int            @map("parent_category_id")
+  parentCategory   Category       @relation(fields: [parentCategoryId], references: [id], onDelete: Cascade)
+  description      String?        @db.VarChar(500)
+  status           GenericStatus  @default(active)
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  articles Article[]
+
+  @@index([parentCategoryId])
+  @@map("subcategories")
+}
+
+// Kanyakumari district sub-areas (public area filter)
+model Area {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique @db.VarChar(120)
+  slug      String   @unique @db.VarChar(150)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  articles Article[]
+
+  @@map("areas")
+}
+
+model District {
+  id        Int           @id @default(autoincrement())
+  name      String        @unique @db.VarChar(120)
+  status    GenericStatus @default(active)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  articles Article[]
+
+  @@map("districts")
+}
+
+// ───────────────────────── TEAM ─────────────────────────
+
+model Reporter {
+  id          Int           @id @default(autoincrement())
+  name        String        @db.VarChar(120)
+  email       String?       @db.VarChar(190)
+  phone       String?       @db.VarChar(30)
+  location    String?       @db.VarChar(120)
+  designation String?       @db.VarChar(80)
+  bio         String?       @db.Text
+  avatarId    Int?          @map("avatar_id")
+  avatar      Media?        @relation("ReporterAvatar", fields: [avatarId], references: [id], onDelete: SetNull)
+  status      GenericStatus @default(active)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  articles Article[]
+
+  @@map("reporters")
+}
+
+model Author {
+  id              Int           @id @default(autoincrement())
+  name            String        @db.VarChar(120)
+  email           String?       @db.VarChar(190)
+  bio             String?       @db.Text
+  specialization  String?       @db.VarChar(120)
+  twitterHandle   String?       @map("twitter_handle") @db.VarChar(80)
+  status          GenericStatus @default(active)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  @@map("authors")
+}
+
+model Editor {
+  id            Int                @id @default(autoincrement())
+  name          String             @db.VarChar(120)
+  email         String?            @db.VarChar(190)
+  phone         String?            @db.VarChar(30)
+  role          EditorRole         @default(associate_editor)
+  department    EditorDepartment   @default(news_desk)
+  permissions   Json?
+  status        GenericStatus      @default(active)
+  lastLoginAt   DateTime?          @map("last_login_at")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  @@map("editors")
+}
+
+// ─────────────────────── MEDIA ───────────────────────
+
+model Media {
+  id           Int       @id @default(autoincrement())
+  name         String    @db.VarChar(255)   // original file name
+  key          String    @unique            // storage key e.g. 2026/08/uuid.jpg
+  url          String    @db.VarChar(500)   // public URL
+  mimeType     String    @map("mime_type") @db.VarChar(100)
+  sizeBytes    Int       @map("size_bytes")
+  kind         MediaType @default(image)
+  width        Int?
+  height       Int?
+  thumbnailKey String?   @map("thumbnail_key")
+  thumbnailUrl String?   @map("thumbnail_url") @db.VarChar(500)
+  uploadedById Int?      @map("uploaded_by_id")
+  uploadedBy   User?     @relation("MediaUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  // references
+  articleImages    Article[]    @relation("ArticleFeaturedImage")
+  galleryCovers    Gallery[]    @relation("GalleryCover")
+  galleryImageRefs GalleryImage[]
+  reporterAvatars  Reporter[]   @relation("ReporterAvatar")
+  userAvatars      User[]       @relation("UserAvatar")
+  adImages         Advertisement[] @relation("AdImage")
+  settingLogos     SiteSettings[] @relation("SettingLogo")
+  settingFavicons  SiteSettings[] @relation("SettingFavicon")
+  attractionImages TouristAttraction[] @relation("AttractionImage")
+
+  @@index([createdAt])
+  @@map("media")
+}
+
+// ─────────────────────── ARTICLES ───────────────────────
+
+model Article {
+  id             Int           @id @default(autoincrement())
+  slug           String        @unique @db.VarChar(200)
+  title          String        @db.VarChar(255)
+  titleTa        String?       @map("title_ta") @db.VarChar(255)
+  excerpt        String        @db.VarChar(500)
+  excerptTa      String?       @map("excerpt_ta") @db.VarChar(500)
+  content        String        @db.MediumText     // sanitized HTML
+  contentTa      String?       @map("content_ta") @db.MediumText
+  categoryId     Int           @map("category_id")
+  category       Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  subcategoryId  Int?          @map("subcategory_id")
+  subcategory    Subcategory?  @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+  areaId         Int?          @map("area_id")
+  area           Area?         @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  districtId     Int?          @map("district_id")
+  district       District?     @relation(fields: [districtId], references: [id], onDelete: SetNull)
+  authorId       Int           @map("author_id")
+  author         Reporter      @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  location       String?       @db.VarChar(120)
+  featuredImageId Int?         @map("featured_image_id")
+  featuredImage   Media?        @relation("ArticleFeaturedImage", fields: [featuredImageId], references: [id], onDelete: SetNull)
+  isBreaking     Boolean       @default(false) @map("is_breaking")
+  isFeatured     Boolean       @default(false) @map("is_featured")
+  status         ArticleStatus @default(draft)
+  publishDate    DateTime?     @map("publish_date") @db.Date
+  publishTime    String?       @map("publish_time") @db.VarChar(5)  // "HH:MM" (MySQL TIME has no Prisma type)
+  publishedAt    DateTime?     @map("published_at")
+  views          Int           @default(0)
+  rejectionReason String?      @map("rejection_reason") @db.Text
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  tags        ArticleTag[]
+  seo         ArticleSeo?
+  viewsLog    ArticleView[]
+  comments    Comment[]
+  breakingRefs BreakingNews[]
+  socialPosts SocialPost[]
+
+  @@index([status, publishedAt])
+  @@index([categoryId, publishedAt])
+  @@index([areaId, publishedAt])
+  @@index([authorId])
+  @@index([isBreaking, status])
+  @@map("articles")
+}
+
+// FULLTEXT(title, excerpt, content) created via raw SQL migration
+// (Prisma does not manage MySQL FULLTEXT indexes).
+
+model Tag {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique @db.VarChar(60) // stored lowercase
+  createdAt DateTime @default(now()) @map("created_at")
+
+  articles ArticleTag[]
+
+  @@map("tags")
+}
+
+model ArticleTag {
+  articleId Int     @map("article_id")
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  tagId     Int     @map("tag_id")
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, tagId])
+  @@index([tagId])
+  @@map("article_tags")
+}
+
+model ArticleSeo {
+  id             Int     @id @default(autoincrement())
+  articleId      Int     @unique @map("article_id")
+  article        Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  seoTitle       String? @map("seo_title") @db.VarChar(70)
+  metaDescription String? @map("meta_description") @db.VarChar(160)
+  focusKeyword   String? @map("focus_keyword") @db.VarChar(80)
+  metaKeywords   String? @map("meta_keywords") @db.VarChar(500)
+  canonicalUrl   String? @map("canonical_url") @db.VarChar(500)
+  ogTitle        String? @map("og_title") @db.VarChar(140)
+  ogDescription  String? @map("og_description") @db.VarChar(200)
+  twitterTitle   String? @map("twitter_title") @db.VarChar(140)
+  twitterDescription String? @map("twitter_description") @db.VarChar(200)
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("article_seo")
+}
+
+// One row per counted view (debounced: 1 per article+ip_hash per 6h)
+model ArticleView {
+  id        Int      @id @default(autoincrement())
+  articleId Int      @map("article_id")
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  ipHash    String   @map("ip_hash") @db.Char(64)
+  userAgent String?  @map("user_agent") @db.VarChar(255)
+  referrer  String?  @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([articleId, createdAt])
+  @@index([articleId, ipHash, createdAt])
+  @@index([createdAt])
+  @@map("article_views")
+}
+
+// ─────────────────────── VIDEO / GALLERY ───────────────────────
+
+model Video {
+  id           Int         @id @default(autoincrement())
+  title        String      @db.VarChar(255)
+  thumbnailUrl String?     @map("thumbnail_url") @db.VarChar(500)
+  url          String      @db.VarChar(500)
+  type         VideoType   @default(youtube)
+  videoId      String?     @map("video_id") @db.VarChar(60) // parsed youtube/vimeo id (public embed key)
+  categoryId   Int?        @map("category_id")
+  category     Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  duration     String?     @db.VarChar(10)
+  description  String?     @db.Text
+  status       GenericStatus @default(inactive) // active == published (admin enum: published|draft)
+  views        Int         @default(0)
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  @@index([status, createdAt])
+  @@map("videos")
+}
+
+model Gallery {
+  id           Int           @id @default(autoincrement())
+  title        String        @db.VarChar(255)
+  description  String?       @db.Text
+  album        GalleryAlbum  @default(news)
+  categoryId   Int?          @map("category_id")
+  category     Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  coverImageId Int?          @map("cover_image_id")
+  coverImage   Media?        @relation("GalleryCover", fields: [coverImageId], references: [id], onDelete: SetNull)
+  status       GenericStatus @default(inactive) // active == published
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  images GalleryImage[]
+
+  @@index([status, album])
+  @@map("galleries")
+}
+
+model GalleryImage {
+  id        Int      @id @default(autoincrement())
+  galleryId Int      @map("gallery_id")
+  gallery   Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  mediaId   Int      @map("media_id")
+  media     Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  caption   String?  @db.VarChar(255)
+  sortOrder Int      @default(0) @map("sort_order")
+
+  @@index([galleryId, sortOrder])
+  @@map("gallery_images")
+}
+
+// ─────────────────────── BREAKING / LIVE ───────────────────────
+
+model BreakingNews {
+  id               Int             @id @default(autoincrement())
+  headline         String          @db.VarChar(300)
+  articleId        Int?            @map("article_id")
+  article          Article?        @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  categoryId       Int?            @map("category_id")
+  category         Category?       @relation("BreakingCategory", fields: [categoryId], references: [id], onDelete: SetNull)
+  priority         Int             @default(1)
+  displayDuration  Int             @default(5) @map("display_duration")
+  startTime        DateTime?       @map("start_time")
+  endTime          DateTime?       @map("end_time")
+  status           BreakingStatus  @default(scheduled)
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  @@index([status, priority])
+  @@map("breaking_news")
+}
+
+model LiveEvent {
+  id          Int             @id @default(autoincrement())
+  eventTitle  String          @db.VarChar(255)
+  categoryId  Int?            @map("category_id")
+  category    Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  status      LiveEventStatus @default(scheduled)
+  startedAt   DateTime?       @map("started_at")
+  endedAt     DateTime?       @map("ended_at")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  updates LiveUpdate[]
+
+  @@index([status])
+  @@map("live_events")
+}
+
+model LiveUpdate {
+  id        Int      @id @default(autoincrement())
+  eventId   Int      @map("event_id")
+  event     LiveEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  text      String   @db.Text
+  type      String   @default("update") @db.VarChar(30)
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([eventId, createdAt])
+  @@map("live_updates")
+}
+
+// ─────────────────────── ADS / ENGAGEMENT ───────────────────────
+
+model Advertisement {
+  id         Int           @id @default(autoincrement())
+  title      String        @db.VarChar(255)
+  description String?      @db.VarChar(500)
+  imageId    Int?          @map("image_id")
+  image      Media?        @relation("AdImage", fields: [imageId], references: [id], onDelete: SetNull)
+  position   AdPosition    @default(leaderboard)
+  linkUrl    String?       @map("link_url") @db.VarChar(500)
+  startDate  DateTime      @map("start_date") @db.Date
+  endDate    DateTime      @map("end_date") @db.Date
+  status     GenericStatus @default(active)
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  @@index([position, status])
+  @@map("advertisements")
+}
+
+model Comment {
+  id          Int           @id @default(autoincrement())
+  articleId   Int           @map("article_id")
+  article     Article       @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  readerId    Int?          @map("reader_id")
+  reader      ReaderAccount? @relation(fields: [readerId], references: [id], onDelete: SetNull)
+  name        String        @db.VarChar(120)
+  email       String?       @db.VarChar(190)
+  body        String        @db.Text // plain text only (never rendered as HTML)
+  status      CommentStatus @default(pending)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  @@index([articleId, status])
+  @@index([status])
+  @@map("comments")
+}
+
+model Notification {
+  id          Int                @id @default(autoincrement())
+  title       String             @db.VarChar(200)
+  message     String             @db.Text
+  link        String?            @db.VarChar(300)
+  type        String             @default("general") @db.VarChar(30)
+  target      String             @default("all") @db.VarChar(30)
+  status      NotificationStatus @default(draft)
+  scheduledAt DateTime?          @map("scheduled_at")
+  sentAt      DateTime?          @map("sent_at")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("notifications")
+}
+
+model SocialPost {
+  id          Int              @id @default(autoincrement())
+  platform    SocialPlatform   @default(facebook)
+  articleId   Int              @map("article_id")
+  article     Article          @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  caption     String           @db.Text
+  hashtags    String?          @db.VarChar(255)
+  scheduledAt DateTime?        @map("scheduled_at")
+  status      SocialPostStatus @default(draft)
+  sentAt      DateTime?        @map("sent_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  @@index([platform, status])
+  @@map("social_posts")
+}
+
+// ─────────────────────── AUDIT / SITE ───────────────────────
+
+model ActivityLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String   @db.VarChar(60)   // e.g. article.created
+  module    String   @db.VarChar(60)   // e.g. news
+  record    String?  @db.VarChar(120)  // e.g. slug or id
+  details   String?  @db.Text
+  ipAddress String?  @map("ip_address") @db.VarChar(45)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@index([module, createdAt])
+  @@map("activity_logs")
+}
+
+model ContactSubmission {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(120)
+  email     String   @db.VarChar(190)
+  subject   String?  @db.VarChar(200)
+  message   String   @db.Text
+  status    String   @default("new") @db.VarChar(20) // new | emailed
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("contact_submissions")
+}
+
+model SiteSettings {
+  id           Int       @id @default(1)
+  siteName     String    @default("Kanyakumari Today") @map("site_name") @db.VarChar(120)
+  tagline      String?   @db.VarChar(255)
+  logoId       Int?      @map("logo_id")
+  logo         Media?    @relation("SettingLogo", fields: [logoId], references: [id], onDelete: SetNull)
+  faviconId    Int?      @map("favicon_id")
+  favicon      Media?    @relation("SettingFavicon", fields: [faviconId], references: [id], onDelete: SetNull)
+  contactEmail String?   @map("contact_email") @db.VarChar(190)
+  contactPhone String?   @map("contact_phone") @db.VarChar(40)
+  address      String?   @db.VarChar(300)
+  headerNote   String?   @map("header_note") @db.VarChar(255)
+  footerText   String?   @map("footer_text") @db.Text
+  socialFacebook  String? @map("social_facebook") @db.VarChar(300)
+  socialTwitter   String? @map("social_twitter") @db.VarChar(300)
+  socialInstagram String? @map("social_instagram") @db.VarChar(300)
+  socialYoutube   String? @map("social_youtube") @db.VarChar(300)
+  // Static reference data (taluks, govt offices, helplines, transport)
+  // seeded from the public frontend — served by GET /api/district-info.
+  districtInfo    Json?     @map("district_info")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@map("site_settings")
+}
+
+// ─────────────────────── STATIC CONTENT ───────────────────────
+
+model JobListing {
+  id        Int      @id @default(autoincrement())
+  title     String   @db.VarChar(255)
+  org       String?  @db.VarChar(150)
+  location  String?  @db.VarChar(120)
+  type      JobType  @default(private)
+  lastDate  DateTime @map("last_date") @db.Date
+  applyUrl  String?  @map("apply_url") @db.VarChar(500)
+  status    GenericStatus @default(active)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status, lastDate])
+  @@map("job_listings")
+}
+
+model TouristAttraction {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(150)
+  description String? @db.Text
+  imageId   Int?     @map("image_id")
+  image     Media?   @relation("AttractionImage", fields: [imageId], references: [id], onDelete: SetNull)
+  category  String?  @db.VarChar(50)
+  timings   String?  @db.VarChar(120)
+  entryFee  String?  @map("entry_fee") @db.VarChar(80)
+  status    GenericStatus @default(active)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("tourist_attractions")
+}
+
+model EPaper {
+  id        Int      @id @default(autoincrement())
+  paperDate DateTime @unique @map("paper_date") @db.Date
+  pdfPath   String   @map("pdf_path") @db.VarChar(500)
+  pdfUrl    String   @map("pdf_url") @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("e_papers")
+}
