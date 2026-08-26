@@ -7,7 +7,6 @@ const mockPrisma = {
   category: { findUnique: jest.fn() },
   article: { findMany: jest.fn(), count: jest.fn() },
   gallery: { findMany: jest.fn() },
-  $queryRaw: jest.fn(),
 };
 
 jest.mock('../../src/config/prisma', () => mockPrisma);
@@ -55,11 +54,12 @@ describe('public search contract', () => {
   test.each([
     ["'\"%_+-() தமிழ் spaces", 'relevance'],
     ['ordinary', undefined],
-  ])('relevance is parameterized and preserves rank for %s', async (q, sort) => {
-    mockPrisma.$queryRaw.mockResolvedValue([{ id: 2, score: 4 }, { id: 1, score: 2 }]);
-    mockPrisma.article.findMany
-      .mockResolvedValueOnce([{ id: 3 }])
-      .mockResolvedValueOnce([article(1), article(2), article(3)]);
+  ])('relevance uses supported parameterized Prisma filters for %s', async (q, sort) => {
+    mockPrisma.article.findMany.mockResolvedValue([
+      { ...article(1), title: `Prefix ${q}` },
+      { ...article(2), title: q },
+      { ...article(3), tags: [{ tag: { name: q.toLowerCase() } }] },
+    ]);
 
     const response = await request(appFor('/api/search', controller.search))
       .get('/api/search')
@@ -67,9 +67,12 @@ describe('public search contract', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.data.map((row) => row.id)).toEqual([2, 1, 3]);
-    const sql = mockPrisma.$queryRaw.mock.calls[0][0];
-    expect(sql.values.filter((value) => value === q)).toHaveLength(2);
-    expect(sql.strings.join('')).not.toContain(q);
+    expect(mockPrisma.article.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        status: 'published',
+        OR: expect.arrayContaining([{ title: { contains: q } }]),
+      }),
+    }));
   });
 
   test.each([
@@ -86,7 +89,6 @@ describe('public search contract', () => {
   });
 
   test('zero results and empty queries return valid empty responses', async () => {
-    mockPrisma.$queryRaw.mockResolvedValue([]);
     mockPrisma.article.findMany.mockResolvedValue([]);
     const app = appFor('/api/search', controller.search);
     expect((await request(app).get('/api/search').query({ q: 'none' })).body.data).toEqual([]);

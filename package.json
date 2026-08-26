@@ -15,8 +15,10 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:validate": "prisma validate",
     "seed": "node prisma/seed.js",
-    "lint": "eslint \"src/**/*.js\" \"tests/**/*.js\" \"prisma/*.js\" server.js",
-    "test": "jest --runInBand"
+    "lint": "eslint \"src/**/*.js\" \"tests/**/*.js\" \"tests-integration/**/*.js\" \"scripts/**/*.js\" \"prisma/*.js\" server.js",
+    "test": "jest --runInBand && node scripts/run-integration-tests.js",
+    "test:unit": "jest --runInBand",
+    "test:integration": "node scripts/run-integration-tests.js"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",

@@ -10,7 +10,6 @@
  * (status = published AND published_at <= now).
  */
 const prisma = require('../config/prisma');
-const { Prisma } = require('@prisma/client');
 const env = require('../config/env');
 const { asyncHandler, ApiErrors } = require('../utils/apiError');
 const articleService = require('../services/articleService');
@@ -348,50 +347,50 @@ const search = asyncHandler(async (req, res) => {
       include: articleService.LIST_INCLUDE,
     });
   } else {
-    // The migration owns a FULLTEXT index over title/excerpt/content. Prisma
-    // filters cannot contain Prisma.sql fragments, so rank IDs with a fully
-    // parameterized raw query and hydrate them through Prisma afterwards.
-    const categorySql = scope.categoryId
-      ? Prisma.sql`AND a.category_id = ${scope.categoryId}`
-      : Prisma.empty;
-    const rankedRows = await prisma.$queryRaw(Prisma.sql`
-      SELECT a.id,
-             MATCH(a.title, a.excerpt, a.content)
-               AGAINST (${q} IN NATURAL LANGUAGE MODE) AS score
-      FROM articles AS a
-      WHERE a.status = 'published'
-        AND a.published_at <= ${new Date()}
-        ${categorySql}
-        AND MATCH(a.title, a.excerpt, a.content)
-              AGAINST (${q} IN NATURAL LANGUAGE MODE)
-      ORDER BY score DESC, a.published_at DESC
-      LIMIT ${limit}
-    `);
-
-    const rankedIds = rankedRows.map((row) => Number(row.id));
-    const tagRows = await prisma.article.findMany({
+    // Prisma does not support MATCH expressions inside `where`. Use its
+    // parameterized contains filters to collect a bounded candidate set, then
+    // rank deterministically in-process. This remains correct even when a
+    // deployment is missing the optional FULLTEXT index.
+    const candidates = await prisma.article.findMany({
       where: {
         ...scope,
-        id: rankedIds.length ? { notIn: rankedIds } : undefined,
-        tags: { some: { tag: { name: { contains: q.toLowerCase() } } } },
+        OR: [
+          { title: { contains: q } },
+          { excerpt: { contains: q } },
+          { content: { contains: q } },
+          { tags: { some: { tag: { name: { contains: q.toLowerCase() } } } } },
+        ],
       },
       orderBy: { publishedAt: 'desc' },
-      take: limit,
-      select: { id: true },
+      take: Math.min(limit * 10, 200),
+      include: articleService.LIST_INCLUDE,
     });
-    const ids = [...rankedIds, ...tagRows.map((row) => row.id)].slice(0, limit);
-    const hydrated = ids.length
-      ? await prisma.article.findMany({
-        where: { ...scope, id: { in: ids } },
-        include: articleService.LIST_INCLUDE,
-      })
-      : [];
-    const byId = new Map(hydrated.map((article) => [article.id, article]));
-    items = ids.map((id) => byId.get(id)).filter(Boolean);
+    items = candidates
+      .map((article) => ({ article, score: relevanceScore(article, q) }))
+      .sort((a, b) => b.score - a.score || b.article.publishedAt - a.article.publishedAt)
+      .slice(0, limit)
+      .map(({ article }) => article);
   }
 
   res.json({ success: true, data: items.map(publicArticleSummary) });
 });
+
+function relevanceScore(article, query) {
+  const needle = query.toLowerCase();
+  const title = String(article.title || '').toLowerCase();
+  const excerpt = String(article.excerpt || '').toLowerCase();
+  const content = String(article.content || '').toLowerCase();
+  const tags = (article.tags || []).map((link) => String(link.tag?.name || '').toLowerCase());
+  let score = 0;
+  if (title === needle) score += 100;
+  else if (title.startsWith(needle)) score += 50;
+  else if (title.includes(needle)) score += 30;
+  if (excerpt.includes(needle)) score += 15;
+  if (content.includes(needle)) score += 5;
+  if (tags.includes(needle)) score += 25;
+  else if (tags.some((tag) => tag.includes(needle))) score += 10;
+  return score;
+}
 
 // ══════════════════════════ GALLERY ══════════════════════════
 
@@ -804,5 +803,6 @@ module.exports = {
   otpRequest,
   otpVerify,
   trendingItems,
+  relevanceScore,
   publicSettingsDto,
 };
