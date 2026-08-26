@@ -15,7 +15,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:validate": "prisma validate",
     "seed": "node prisma/seed.js",
-    "lint": "eslint \"src/**/*.js\" \"prisma/*.js\" server.js"
+    "lint": "eslint \"src/**/*.js\" \"tests/**/*.js\" \"prisma/*.js\" server.js",
+    "test": "jest --runInBand"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
@@ -38,6 +39,8 @@
   },
   "devDependencies": {
     "eslint": "^8.57.1",
-    "prisma": "^6.2.1"
+    "jest": "^30.4.2",
+    "prisma": "^6.2.1",
+    "supertest": "^7.2.2"
   }
 }
