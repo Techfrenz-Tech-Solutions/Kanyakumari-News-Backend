@@ -12,6 +12,7 @@ This document records the backend contract at the end of Step 1. It is a baselin
 - Refresh tokens are stored hashed, rotate on use, and are revoked on logout, password change, or password reset.
 - The refresh cookie is `httpOnly`, `SameSite=Strict`, scoped to `/api`, and `Secure` in production.
 - Authenticated admin routes reload the user and deny users whose status is not `active`.
+- Admin user DTOs include server-derived `permissions[]` values such as `news.view`; Super Admin receives `['*']`. Base-role and per-user extra permissions are already merged.
 
 ### Reader
 

@@ -13,6 +13,7 @@ const mailService = require('./mailService');
 const ARGON2_OPTS = { memoryCost: 19456, timeCost: 2, parallelism: 1 };
 
 function toPublicUser(user) {
+  const { ROLE_LABELS, effectivePermissions } = require('../utils/rbac');
   return {
     id: user.id,
     name: user.name,
@@ -21,7 +22,8 @@ function toPublicUser(user) {
     bio: user.bio,
     avatar: user.avatar ? user.avatar.url : null,
     role: user.role,
-    roleLabel: (require('../utils/rbac').ROLE_LABELS[user.role]) || user.role,
+    roleLabel: ROLE_LABELS[user.role] || user.role,
+    permissions: effectivePermissions(user),
     status: user.status,
   };
 }

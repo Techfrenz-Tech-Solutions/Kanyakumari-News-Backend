@@ -1,6 +1,6 @@
 'use strict';
 
-const { ROLE_PERMISSIONS, can, permissionsFor } = require('../../src/utils/rbac');
+const { ROLE_PERMISSIONS, can, permissionsFor, effectivePermissions } = require('../../src/utils/rbac');
 
 describe('RBAC permission matrix', () => {
   test.each(Object.keys(ROLE_PERMISSIONS))('%s has an explicit deny-by-default matrix', (role) => {
@@ -22,5 +22,16 @@ describe('RBAC permission matrix', () => {
 
   test('super admin bypass remains intact', () => {
     expect(can({ role: 'super_admin' }, 'news', 'publish')).toBe(true);
+    expect(effectivePermissions({ role: 'super_admin' })).toEqual(['*']);
+  });
+
+  test('effective permissions flatten base and per-user grants for clients', () => {
+    const permissions = effectivePermissions({
+      role: 'reporter',
+      extraPermissions: ['news:publish', 'settings:view'],
+    });
+    expect(permissions).toEqual(expect.arrayContaining([
+      'news.view', 'news.create', 'news.edit', 'news.publish', 'settings.view',
+    ]));
   });
 });

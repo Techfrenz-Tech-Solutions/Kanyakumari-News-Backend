@@ -34,7 +34,11 @@ describe('admin authentication fundamentals', () => {
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith(expect.objectContaining({
       where: { email: 'admin@example.com' },
     }));
-    expect(result).toMatchObject({ accessToken: 'jwt', refreshToken: 'opaque' });
+    expect(result).toMatchObject({
+      accessToken: 'jwt',
+      refreshToken: 'opaque',
+      user: { role: 'admin', permissions: expect.arrayContaining(['news.view', 'news.publish']) },
+    });
   });
 
   test('missing and incorrect credentials share the same controlled response', async () => {

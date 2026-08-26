@@ -132,4 +132,34 @@ function can(user, module, action) {
   return perms.includes('*') || perms.includes(action);
 }
 
-module.exports = { ROLE_PERMISSIONS, ROLE_LABELS, permissionsFor, can };
+/** Flatten the effective matrix into stable `module.action` strings for UIs. */
+function effectivePermissions(user) {
+  if (!user) return [];
+  if (user.role === 'super_admin') return ['*'];
+
+  const modules = new Set([
+    ...Object.keys(ROLE_PERMISSIONS[user.role] || {}),
+    ...permissionsFromExtras(user).map((permission) => permission.split(':')[0]),
+  ]);
+  const flattened = [];
+  for (const module of modules) {
+    for (const action of permissionsFor(user, module)) {
+      flattened.push(`${module}.${action}`);
+    }
+  }
+  return [...new Set(flattened)].sort();
+}
+
+function permissionsFromExtras(user) {
+  let extra = user?.extraPermissions || [];
+  if (typeof extra === 'string') {
+    try {
+      extra = JSON.parse(extra);
+    } catch {
+      extra = [];
+    }
+  }
+  return Array.isArray(extra) ? extra.filter((item) => typeof item === 'string') : [];
+}
+
+module.exports = { ROLE_PERMISSIONS, ROLE_LABELS, permissionsFor, effectivePermissions, can };
