@@ -177,7 +177,7 @@ async function syncTags(client, articleId, tagNames) {
   }
 }
 
-function buildSanitized(data, { requireExcerpt = true } = {}) {
+function buildSanitized(data) {
   const out = {};
   const excerpt = data.excerpt ?? data.shortDescription;
   if (excerpt !== undefined) out.excerpt = String(excerpt).slice(0, 500);
@@ -275,7 +275,7 @@ async function createArticle(data, req) {
     });
 
     if (data.tags !== undefined) {
-      await syncTags(created.id, data.tags);
+      await syncTags(tx, created.id, data.tags);
       await tx.article.update({ where: { id: created.id }, data: {} }); // touch updated_at
       return tx.article.findUnique({ where: { id: created.id }, include: DETAIL_INCLUDE });
     }
@@ -336,7 +336,7 @@ async function updateArticle(id, data, req) {
       include: DETAIL_INCLUDE,
     });
     if (data.tags !== undefined) {
-      await syncTags(id, data.tags);
+      await syncTags(tx, id, data.tags);
       return tx.article.findUnique({ where: { id }, include: DETAIL_INCLUDE });
     }
     return updated;
@@ -489,8 +489,12 @@ async function changeStatus(id, { action, reason }, req) {
     data.publishDate = null;
     data.publishTime = null;
   }
-  if (transition.to === 'draft' && action === 'unpublish') {
+  if (transition.to === 'draft') {
     data.publishedAt = null;
+  }
+  if (action === 'cancel-schedule') {
+    data.publishDate = null;
+    data.publishTime = null;
   }
   if (action === 'reject') {
     data.rejectionReason = reason || null;

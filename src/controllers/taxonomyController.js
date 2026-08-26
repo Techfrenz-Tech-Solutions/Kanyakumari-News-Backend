@@ -6,7 +6,6 @@ const { logActivity } = require('../services/auditService');
 const { uniqueSlug, slugify } = require('../utils/slugify');
 const {
   adminCategory,
-  publicCategory,
   adminSubcategory,
   areaDto,
   districtDto,
@@ -40,16 +39,16 @@ function parseSubcategoryNames(value) {
  * missing ones with auto slugs, keeps existing ones, removes ones no longer
  * present.
  */
-async function syncCategorySubcategories(categoryId, names) {
-  const existing = await prisma.subcategory.findMany({ where: { parentCategoryId: categoryId } });
+async function syncCategorySubcategories(client, categoryId, names) {
+  const existing = await client.subcategory.findMany({ where: { parentCategoryId: categoryId } });
   const byName = new Map(existing.map((s) => [s.name, s]));
 
   // Create new + keep existing
   for (const name of names) {
     const found = byName.get(name);
     if (!found) {
-      const slug = await uniqueSlug(name, null, null, prisma.subcategory);
-      await prisma.subcategory.create({
+      const slug = await uniqueSlug(name, null, null, client.subcategory);
+      await client.subcategory.create({
         data: { name, slug, parentCategoryId: categoryId, status: 'active' },
       });
     }
@@ -58,9 +57,9 @@ async function syncCategorySubcategories(categoryId, names) {
   // Remove dropped ones (only those without articles to avoid orphaning)
   for (const [name, sub] of byName) {
     if (!names.includes(name)) {
-      const articleCount = await prisma.article.count({ where: { subcategoryId: sub.id } });
+      const articleCount = await client.article.count({ where: { subcategoryId: sub.id } });
       if (articleCount === 0) {
-        await prisma.subcategory.delete({ where: { id: sub.id } });
+        await client.subcategory.delete({ where: { id: sub.id } });
       }
     }
   }
@@ -90,7 +89,7 @@ const categories = {
         },
       });
       const subs = parseSubcategoryNames(data.subcategories);
-      if (subs && subs.length) await syncCategorySubcategories(cat.id, subs);
+      if (subs && subs.length) await syncCategorySubcategories(tx, cat.id, subs);
       return tx.category.findUnique({
         where: { id: cat.id },
         include: { subcategories: true, _count: { select: { articles: true } } },
@@ -127,7 +126,7 @@ const categories = {
         },
       });
       const subs = parseSubcategoryNames(data.subcategories);
-      if (subs !== undefined) await syncCategorySubcategories(id, subs);
+      if (subs !== undefined) await syncCategorySubcategories(tx, id, subs);
       return tx.category.findUnique({
         where: { id },
         include: { subcategories: true, _count: { select: { articles: true } } },
@@ -370,4 +369,12 @@ const districts = {
   }),
 };
 
-module.exports = { categories, subcategories, areas, districts, withDistrictStats };
+module.exports = {
+  categories,
+  subcategories,
+  areas,
+  districts,
+  withDistrictStats,
+  parseSubcategoryNames,
+  syncCategorySubcategories,
+};

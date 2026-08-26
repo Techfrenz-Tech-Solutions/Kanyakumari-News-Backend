@@ -125,8 +125,8 @@ async function revokeRefreshToken(presented) {
 }
 
 /** Revoke every refresh token for a user (password change, role change, etc.) */
-async function revokeAllForUser(userId) {
-  await prisma.refreshToken.updateMany({
+function revokeAllForUser(userId, client = prisma) {
+  return client.refreshToken.updateMany({
     where: { userId, revokedAt: null },
     data: { revokedAt: new Date() },
   });

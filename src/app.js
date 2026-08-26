@@ -25,6 +25,18 @@ const publicRouter = require('./routes/public/index');
 
 const app = express();
 
+const corsOptions = {
+  origin: (origin, cb) => {
+    // Allow same-origin / curl / server-to-server (no Origin header)
+    if (!origin || env.CORS_ORIGINS.includes(origin)) return cb(null, true);
+    return cb(new Error(`CORS: origin ${origin} not allowed`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400,
+};
+
 // Behind Nginx in production — resolve client IP from X-Forwarded-For.
 app.set('trust proxy', env.TRUST_PROXY);
 app.disable('x-powered-by');
@@ -36,19 +48,7 @@ app.use(
     crossOriginResourcePolicy: { policy: 'cross-origin' }, // allow SPA-origin img/media fetches
   })
 );
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      // Allow same-origin / curl / server-to-server (no Origin header)
-      if (!origin || env.CORS_ORIGINS.includes(origin)) return cb(null, true);
-      return cb(new Error(`CORS: origin ${origin} not allowed`));
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    maxAge: 86400,
-  })
-);
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(cookieParser());
@@ -83,4 +83,4 @@ app.use((req, res, next) => {
   next();
 });
 
-module.exports = { app, prisma };
+module.exports = { app, prisma, corsOptions };

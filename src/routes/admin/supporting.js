@@ -9,12 +9,9 @@
 const { z } = require('zod');
 const prisma = require('../../config/prisma');
 const { asyncHandler, ApiErrors } = require('../../utils/apiError');
-const articleService = require('../../services/articleService');
 const { logActivity } = require('../../services/auditService');
 const mediaService = require('../../services/mediaService');
-const { publicArticleSummary, breakingDto } = require('../../mappers/news');
-
-const { clientIp, hashIp } = require('../../utils/ipHash');
+const { publicArticleSummary } = require('../../mappers/news');
 
 // ═══════════════════════════ HELPERS ═══════════════════════════
 

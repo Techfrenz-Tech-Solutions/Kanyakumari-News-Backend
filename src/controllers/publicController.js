@@ -26,7 +26,7 @@ const {
 const { publicCategory } = require('../mappers/taxonomy');
 const { clientIp } = require('../utils/ipHash');
 
-const { publicScope, getByCategorySlug, getBySlug, getRelated, recordView } = articleService;
+const { publicScope, getBySlug, getRelated, recordView } = articleService;
 
 /** Resolve a category slug to its row (404 when missing). */
 async function requireCategory(slug) {
@@ -53,8 +53,6 @@ async function requireArea(slug) {
 const home = asyncHandler(async (req, res) => {
   const now = new Date();
   const scope = publicScope(now);
-  const site = await getSiteSettings();
-
   const [hero, breaking, latestRows, latestTotal, categories, areas, ads, settings] =
     await Promise.all([
       // Hero: featured first, fallback to latest
@@ -318,7 +316,8 @@ const search = asyncHandler(async (req, res) => {
     res.json({ success: true, data: [] });
     return;
   }
-  const limit = Math.min(parseInt(req.query.limit, 10) || 20, 50);
+  if (q.length > 200) throw ApiErrors.badRequest('Search query must be 200 characters or fewer');
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 50);
   const sort = ['relevance', 'newest', 'popular'].includes(req.query.sort) ? req.query.sort : 'relevance';
 
   const scope = publicScope();
@@ -331,10 +330,7 @@ const search = asyncHandler(async (req, res) => {
     scope.categoryId = cat.id;
   }
 
-  const escaped = q.replace(/[%_\\]/g, '\\$&').replace(/"/g, '');
-
   let items;
-  let total;
   if (sort === 'newest' || sort === 'popular') {
     const where = {
       ...scope,
@@ -345,39 +341,53 @@ const search = asyncHandler(async (req, res) => {
         { tags: { some: { tag: { name: { contains: q.toLowerCase() } } } } },
       ],
     };
-    [items, total] = await Promise.all([
-      prisma.article.findMany({
-        where,
-        orderBy: sort === 'newest' ? { publishedAt: 'desc' } : { views: 'desc' },
-        take: limit,
-        include: articleService.LIST_INCLUDE,
-      }),
-      prisma.article.count({ where }),
-    ]);
-  } else {
-    // Relevance via FULLTEXT (title, excerpt) + tag contains fallback
-    const fulltext = await prisma.article.findMany({
-      where: {
-        ...scope,
-        OR: [
-          Prisma.sql`MATCH(title, excerpt) AGAINST (${escaped} IN NATURAL LANGUAGE MODE)`,
-          { tags: { some: { tag: { name: { contains: q.toLowerCase() } } } } },
-        ],
-      },
+    items = await prisma.article.findMany({
+      where,
+      orderBy: sort === 'newest' ? { publishedAt: 'desc' } : { views: 'desc' },
+      take: limit,
       include: articleService.LIST_INCLUDE,
     });
-    // rank: FULLTEXT hits first (order returned by MATCH relevance is not
-    // guaranteed in the Prisma projection), then recency
-    const tagOnly = fulltext.filter((a) => {
-      const inText =
-        a.title.toLowerCase().includes(q.toLowerCase()) ||
-        a.excerpt.toLowerCase().includes(q.toLowerCase());
-      return !inText;
+  } else {
+    // The migration owns a FULLTEXT index over title/excerpt/content. Prisma
+    // filters cannot contain Prisma.sql fragments, so rank IDs with a fully
+    // parameterized raw query and hydrate them through Prisma afterwards.
+    const categorySql = scope.categoryId
+      ? Prisma.sql`AND a.category_id = ${scope.categoryId}`
+      : Prisma.empty;
+    const rankedRows = await prisma.$queryRaw(Prisma.sql`
+      SELECT a.id,
+             MATCH(a.title, a.excerpt, a.content)
+               AGAINST (${q} IN NATURAL LANGUAGE MODE) AS score
+      FROM articles AS a
+      WHERE a.status = 'published'
+        AND a.published_at <= ${new Date()}
+        ${categorySql}
+        AND MATCH(a.title, a.excerpt, a.content)
+              AGAINST (${q} IN NATURAL LANGUAGE MODE)
+      ORDER BY score DESC, a.published_at DESC
+      LIMIT ${limit}
+    `);
+
+    const rankedIds = rankedRows.map((row) => Number(row.id));
+    const tagRows = await prisma.article.findMany({
+      where: {
+        ...scope,
+        id: rankedIds.length ? { notIn: rankedIds } : undefined,
+        tags: { some: { tag: { name: { contains: q.toLowerCase() } } } },
+      },
+      orderBy: { publishedAt: 'desc' },
+      take: limit,
+      select: { id: true },
     });
-    const textHits = fulltext.filter((a) => !tagOnly.includes(a));
-    const ranked = [...textHits.sort((x, y) => y.publishedAt - x.publishedAt), ...tagOnly];
-    items = ranked.slice(0, limit);
-    total = ranked.length;
+    const ids = [...rankedIds, ...tagRows.map((row) => row.id)].slice(0, limit);
+    const hydrated = ids.length
+      ? await prisma.article.findMany({
+        where: { ...scope, id: { in: ids } },
+        include: articleService.LIST_INCLUDE,
+      })
+      : [];
+    const byId = new Map(hydrated.map((article) => [article.id, article]));
+    items = ids.map((id) => byId.get(id)).filter(Boolean);
   }
 
   res.json({ success: true, data: items.map(publicArticleSummary) });
@@ -397,7 +407,10 @@ const gallery = asyncHandler(async (req, res) => {
   const rows = await prisma.gallery.findMany({
     where,
     orderBy: { createdAt: 'desc' },
-    include: { coverImage: true, images: { orderBy: { sortOrder: 'asc' }, take: 12 } },
+    include: {
+      coverImage: true,
+      images: { include: { media: true }, orderBy: { sortOrder: 'asc' }, take: 12 },
+    },
   });
   res.json({
     success: true,
@@ -407,7 +420,7 @@ const gallery = asyncHandler(async (req, res) => {
       description: g.description || '',
       image: g.coverImage?.url || null,
       category: g.album, // UI filters compare against Events/Festivals/Nature/News
-      images: g.images.map((gi) => ({
+      images: g.images.filter((gi) => gi.media).map((gi) => ({
         url: gi.media.url,
         thumbnail: gi.media.thumbnailUrl || gi.media.url,
         caption: gi.caption || '',
@@ -692,7 +705,7 @@ const contact = asyncHandler(async (req, res) => {
     data: { name, email, subject: subject || null, message },
   });
   const mail = await mailService.send({
-    to: env.SMTP_FROM || 'admin@example.com',
+    to: env.CONTACT_RECIPIENT,
     subject: `[Contact] ${subject || name}`,
     text: `From: ${name} <${email}>\n\n${message}`,
   });

@@ -84,4 +84,4 @@ const localStorage = {
   IMAGE_MIME,
 };
 
-module.exports = { localStorage, keyFromFileName };
+module.exports = { localStorage, keyFromFileName, resolvePath };

@@ -15,6 +15,7 @@
  *   { available:false, reason } — NEVER invented values.
  */
 const cache = require('../../utils/cache');
+const env = require('../../config/env');
 
 const DEFAULT_CITY = 'Kanyakumari';
 const DEFAULT_COORDS = { lat: 8.0833, lon: 77.5667 };
@@ -112,7 +113,7 @@ async function getCurrent(city) {
         forecast,
       },
     };
-    cache.set(cacheKey, result, 10 * 60 * 1000); // 10 min
+    cache.set(cacheKey, result, env.WEATHER_CACHE_TTL_SECONDS);
     return result;
   } catch (err) {
     // Transient/provider-down: return unavailability (clearly identified),

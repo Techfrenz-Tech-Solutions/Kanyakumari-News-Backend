@@ -7,14 +7,11 @@ const { articleCreate, articleUpdate, statusActionSchema, seoUpdateSchema } = re
 const { adminArticle } = require('../../mappers/news');
 
 const {
-  publicScope,
   createArticle,
   updateArticle,
   deleteArticle,
   getArticle,
   changeStatus: applyStatusChange,
-  TRANSITIONS,
-  DETAIL_INCLUDE,
   LIST_INCLUDE,
   SORT_MAP,
 } = articleService;

@@ -1,7 +1,6 @@
 'use strict';
 
 const rateLimit = require('express-rate-limit');
-const { ApiErrors } = require('../utils/apiError');
 const { clientIp } = require('../utils/ipHash');
 const env = require('../config/env');
 

@@ -35,12 +35,15 @@ const env = {
 
   JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || '',
   JWT_ACCESS_EXPIRES_IN: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
+  JWT_READER_SECRET: process.env.JWT_READER_SECRET || process.env.JWT_ACCESS_SECRET || '',
+  JWT_READER_EXPIRES_IN: process.env.JWT_READER_EXPIRES_IN || '7d',
   REFRESH_TOKEN_EXPIRES_DAYS: int(process.env.REFRESH_TOKEN_EXPIRES_DAYS, 14),
   REFRESH_COOKIE_NAME: process.env.REFRESH_COOKIE_NAME || 'kkn_refresh',
   IP_HASH_SECRET: process.env.IP_HASH_SECRET || '',
 
   ADMIN_FRONTEND_ORIGIN: process.env.ADMIN_FRONTEND_ORIGIN || 'http://localhost:5173',
   PUBLIC_FRONTEND_ORIGIN: process.env.PUBLIC_FRONTEND_ORIGIN || 'http://localhost:3000',
+  EXTRA_CORS_ORIGINS: list(process.env.EXTRA_CORS_ORIGINS),
 
   UPLOAD_DIR: path.resolve(process.env.UPLOAD_DIR || './uploads'),
   PUBLIC_UPLOAD_URL: (process.env.PUBLIC_UPLOAD_URL || `http://localhost:${int(process.env.PORT, 3000)}/uploads`).replace(/\/$/, ''),
@@ -53,6 +56,7 @@ const env = {
   SMTP_USER: process.env.SMTP_USER || '',
   SMTP_PASS: process.env.SMTP_PASS || '',
   SMTP_FROM: process.env.SMTP_FROM || 'Kanyakumari Today <no-reply@kanyakumaritoday.com>',
+  CONTACT_RECIPIENT: process.env.CONTACT_RECIPIENT || '',
 
   OTP_PROVIDER: process.env.OTP_PROVIDER || 'console',
   OTP_EXPIRY_MINUTES: int(process.env.OTP_EXPIRY_MINUTES, 5),
@@ -78,11 +82,11 @@ const env = {
 };
 
 /** CORS origins derived from configured frontends. */
-env.CORS_ORIGINS = list([
-  ...(process.env.ADMIN_FRONTEND_ORIGIN ? [env.ADMIN_FRONTEND_ORIGIN] : []),
-  ...(process.env.PUBLIC_FRONTEND_ORIGIN ? [env.PUBLIC_FRONTEND_ORIGIN] : []),
-  ...(process.env.EXTRA_CORS_ORIGINS ? list(process.env.EXTRA_CORS_ORIGINS) : []),
-].join(', '));
+env.CORS_ORIGINS = [...new Set([
+  env.ADMIN_FRONTEND_ORIGIN,
+  env.PUBLIC_FRONTEND_ORIGIN,
+  ...env.EXTRA_CORS_ORIGINS,
+].filter(Boolean))];
 
 function validateEnv() {
   const problems = [];
@@ -99,8 +103,11 @@ function validateEnv() {
     if (!env.IP_HASH_SECRET || env.IP_HASH_SECRET.length < 16) {
       problems.push('IP_HASH_SECRET must be set (>= 16 chars) in production');
     }
-    if (env.OTP_PROVIDER === 'console') {
-      problems.push('OTP_PROVIDER=console is not allowed in production');
+    if (!env.JWT_READER_SECRET || env.JWT_READER_SECRET.length < 32) {
+      problems.push('JWT_READER_SECRET (or JWT_ACCESS_SECRET fallback) must be >= 32 chars in production');
+    }
+    if (['console', 'dev'].includes(env.OTP_PROVIDER)) {
+      problems.push('development OTP providers are not allowed in production');
     }
     if (!env.API_BASE_URL.startsWith('https://')) {
       problems.push('API_BASE_URL should use https in production');
@@ -113,13 +120,22 @@ function validateEnv() {
       env.JWT_ACCESS_SECRET = `dev-ephemeral-${crypto.randomBytes(24).toString('hex')}`;
       console.warn('[env] WARNING: JWT_ACCESS_SECRET not set — using an ephemeral development secret.');
     }
+    if (!env.JWT_READER_SECRET) env.JWT_READER_SECRET = env.JWT_ACCESS_SECRET;
     if (!env.IP_HASH_SECRET) {
       env.IP_HASH_SECRET = `dev-ephemeral-${crypto.randomBytes(16).toString('hex')}`;
       console.warn('[env] WARNING: IP_HASH_SECRET not set — using an ephemeral development secret.');
     }
-    if (env.OTP_PROVIDER === 'console' && IS_PROD) {
-      problems.push('OTP_PROVIDER=console is not allowed in production');
-    }
+  }
+
+  if (!['console', 'dev'].includes(env.OTP_PROVIDER)) {
+    problems.push(`OTP_PROVIDER=${env.OTP_PROVIDER} is unsupported by this build`);
+  }
+  if (env.OTP_EXPIRY_MINUTES <= 0) problems.push('OTP_EXPIRY_MINUTES must be positive');
+  if (env.OTP_MAX_ATTEMPTS <= 0) problems.push('OTP_MAX_ATTEMPTS must be positive');
+  if (env.WEATHER_CACHE_TTL_SECONDS <= 0) problems.push('WEATHER_CACHE_TTL_SECONDS must be positive');
+  if (env.MARKET_CACHE_TTL_SECONDS <= 0) problems.push('MARKET_CACHE_TTL_SECONDS must be positive');
+  if (IS_PROD && env.SMTP_HOST && !env.CONTACT_RECIPIENT) {
+    problems.push('CONTACT_RECIPIENT is required in production when SMTP is configured');
   }
 
   if (problems.length) {
@@ -128,7 +144,9 @@ function validateEnv() {
       throw new Error(msg);
     }
     // In development we only throw when a critical (always-required) var is missing.
-    const fatal = problems.filter((p) => p.startsWith('DATABASE_URL'));
+    const fatal = problems.filter((p) =>
+      p.startsWith('DATABASE_URL') || p.includes('unsupported by this build')
+    );
     if (fatal.length) throw new Error(msg);
     console.warn(`[env] ${msg}`);
   }

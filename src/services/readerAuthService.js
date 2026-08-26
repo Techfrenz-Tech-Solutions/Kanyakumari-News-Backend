@@ -11,13 +11,11 @@
  */
 const crypto = require('node:crypto');
 const jwt = require('jsonwebtoken');
-const { hash, verify } = require('@node-rs/argon2');
+const { verify } = require('@node-rs/argon2');
 const prisma = require('../config/prisma');
 const env = require('../config/env');
 const { ApiErrors } = require('../utils/apiError');
 const { logActivity } = require('./auditService');
-
-const OTP_MAX_ATTEMPTS = 5;
 
 function sha256(value) {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
@@ -26,8 +24,8 @@ function sha256(value) {
 function readerJwt(user) {
   return jwt.sign(
     { sub: user.id, type: 'reader', email: user.email, phone: user.phone, name: user.name },
-    env.JWT_READER_SECRET || env.JWT_ACCESS_SECRET,
-    { expiresIn: env.JWT_READER_EXPIRES_IN || '7d' }
+    env.JWT_READER_SECRET,
+    { expiresIn: env.JWT_READER_EXPIRES_IN }
   );
 }
 
@@ -45,7 +43,7 @@ function getReaderUser(req) {
   const token = req.cookies?.reader_token || (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
   if (!token) return null;
   try {
-    const payload = jwt.verify(token, env.JWT_READER_SECRET || env.JWT_ACCESS_SECRET);
+    const payload = jwt.verify(token, env.JWT_READER_SECRET);
     if (payload.type !== 'reader') return null;
     return payload;
   } catch {
@@ -55,7 +53,7 @@ function getReaderUser(req) {
 
 // ── Email/password login ──────────────────────────────────────────────────
 
-async function login({ email, password, req }) {
+async function login({ email, password }) {
   const user = await prisma.readerAccount.findUnique({ where: { email } });
   if (!user || !user.passwordHash) {
     throw ApiErrors.unauthorized('Invalid email or password', 'READER_AUTH_FAILED');
@@ -72,7 +70,7 @@ async function login({ email, password, req }) {
  * provider. The dev provider prints the code to the server console and
  * returns it in the response (devCode) — ONLY when not in production.
  */
-const otpProvider = {
+const consoleProvider = {
   name: 'console-dev',
   async send({ phone, code }) {
     if (env.IS_PROD) {
@@ -83,16 +81,28 @@ const otpProvider = {
   },
 };
 
+const OTP_PROVIDERS = Object.freeze({
+  console: consoleProvider,
+  dev: consoleProvider,
+});
+
+function selectOtpProvider(name = env.OTP_PROVIDER) {
+  const provider = OTP_PROVIDERS[String(name).toLowerCase()];
+  if (!provider) throw ApiErrors.providerUnavailable(`OTP (${name})`);
+  if (env.IS_PROD) throw ApiErrors.providerUnavailable('OTP');
+  return provider;
+}
+
 async function requestOtp({ phone, req }) {
   // Rate-limit-ish: throttle per phone (1 request / 60s)
   const recent = await prisma.otpCode.findFirst({
     where: { phone, createdAt: { gte: new Date(Date.now() - 60 * 1000) } },
     select: { id: true },
   });
-  if (recent) throw ApiErrors.tooManyRequests('Too many OTP requests. Try again in a minute.', 'OTP_RATE_LIMITED');
+  if (recent) throw ApiErrors.tooMany('Too many OTP requests. Try again in a minute.', 'OTP_RATE_LIMITED');
 
   const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
-  const provider = env.OTP_PROVIDER === 'console' || env.OTP_PROVIDER === 'dev' ? otpProvider : otpProvider;
+  const provider = selectOtpProvider();
 
   // Invalidate any previous un-consumed codes for this phone
   await prisma.otpCode.updateMany({
@@ -129,8 +139,8 @@ async function verifyOtp({ phone, otp, req }) {
   if (codeRow.expiresAt < new Date()) {
     throw ApiErrors.unauthorized('OTP expired', 'OTP_EXPIRED');
   }
-  if (codeRow.attempts >= OTP_MAX_ATTEMPTS) {
-    throw ApiErrors.tooManyRequests('Too many incorrect attempts. Request a new OTP.', 'OTP_LOCKED');
+  if (codeRow.attempts >= env.OTP_MAX_ATTEMPTS) {
+    throw ApiErrors.tooMany('Too many incorrect attempts. Request a new OTP.', 'OTP_LOCKED');
   }
 
   const match = codeRow.codeHash === sha256(otp);
@@ -168,4 +178,5 @@ module.exports = {
   setReaderCookie,
   publicUser,
   readerJwt,
+  selectOtpProvider,
 };

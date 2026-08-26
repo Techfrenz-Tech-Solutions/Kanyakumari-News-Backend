@@ -7,7 +7,7 @@ const env = require('../config/env');
 const { ApiErrors } = require('../utils/apiError');
 const tokenService = require('./tokenService');
 const { logActivity } = require('./auditService');
-const { clientIp, hashIp } = require('../utils/ipHash');
+const { clientIp } = require('../utils/ipHash');
 const mailService = require('./mailService');
 
 const ARGON2_OPTS = { memoryCost: 19456, timeCost: 2, parallelism: 1 };
@@ -114,7 +114,7 @@ async function forgotPassword({ email }, req) {
     await prisma.passwordResetToken.create({
       data: { email: user.email, tokenHash, expiresAt: new Date(Date.now() + 30 * 60 * 1000) },
     });
-    const resetUrl = `${env.API_BASE_URL}/api/admin/auth/reset-password?token=${rawToken}`;
+    const resetUrl = buildPasswordResetUrl(rawToken);
     const result = await mailService.send({
       to: user.email,
       subject: 'Reset your Kanyakumari News password',
@@ -125,6 +125,12 @@ async function forgotPassword({ email }, req) {
     }
   }
   return { sent: true };
+}
+
+function buildPasswordResetUrl(token) {
+  const resetUrl = new URL('/reset-password', env.ADMIN_FRONTEND_ORIGIN);
+  resetUrl.searchParams.set('token', token);
+  return resetUrl.toString();
 }
 
 async function resetPassword({ token, newPassword }) {
@@ -139,11 +145,11 @@ async function resetPassword({ token, newPassword }) {
   if (!user) throw ApiErrors.badRequest('Reset link is invalid or has expired');
 
   const passwordHash = await hash(newPassword, ARGON2_OPTS);
-  await prisma.$transaction([
-    prisma.user.update({ where: { id: user.id }, data: { passwordHash } }),
-    prisma.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
-    tokenService.revokeAllForUser(user.id),
-  ]);
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: user.id }, data: { passwordHash } });
+    await tx.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: new Date() } });
+    await tokenService.revokeAllForUser(user.id, tx);
+  });
 
   return { ok: true };
 }
@@ -185,4 +191,5 @@ module.exports = {
   changePassword,
   toPublicUser,
   ARGON2_OPTS,
+  buildPasswordResetUrl,
 };

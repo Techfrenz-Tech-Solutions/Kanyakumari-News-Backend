@@ -17,6 +17,9 @@ function get(key) {
 }
 
 function set(key, value, ttlSeconds) {
+  if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) {
+    throw new TypeError('ttlSeconds must be a positive number');
+  }
   store.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
 }
 

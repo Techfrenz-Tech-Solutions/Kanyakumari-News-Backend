@@ -10,8 +10,6 @@
  * - Rejects unsupported formats and oversize files.
  */
 const fs = require('node:fs/promises');
-const path = require('node:path');
-const crypto = require('node:crypto');
 const sharp = require('sharp');
 
 const prisma = require('../config/prisma');
@@ -19,13 +17,6 @@ const env = require('../config/env');
 const { ApiErrors } = require('../utils/apiError');
 const { logActivity } = require('./auditService');
 const { localStorage, keyFromFileName } = require('./storage/localStorage');
-
-const MAGIC = [
-  { mime: 'image/png', bytes: [0x89, 0x50, 0x4e, 0x47], ext: 'png' },
-  { mime: 'image/jpeg', bytes: [0xff, 0xd8, 0xff], ext: 'jpg' },
-  { mime: 'image/webp', bytes: [0x52, 0x49, 0x46, 0x46], ext: 'webp', offset4: true },
-  { mime: 'application/pdf', bytes: [0x25, 0x50, 0x44, 0x46], ext: 'pdf' },
-];
 
 /**
  * Detect MIME by inspecting the leading bytes of a buffer.
@@ -169,7 +160,7 @@ async function processUpload(fileSource, originalName, sizeBytes, { kind = null,
 }
 
 /** List media (search by name), newest first. */
-async function listMedia({ q = null, kind = null, page = 1, limit = 24, req = null } = {}) {
+async function listMedia({ q = null, kind = null, page = 1, limit = 24 } = {}) {
   const where = {};
   if (kind) where.kind = kind;
   if (q) where.name = { contains: q };

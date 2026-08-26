@@ -58,7 +58,7 @@ async function getStocks() {
   if (cached) return cached;
   const result = await selectProvider().getStocks();
   // Only cache successful, available results.
-  if (result.available) cache.set(cacheKey, result, 5 * 60 * 1000);
+  if (result.available) cache.set(cacheKey, result, env.MARKET_CACHE_TTL_SECONDS);
   return result;
 }
 
@@ -67,7 +67,7 @@ async function getRates() {
   const cached = cache.get(cacheKey);
   if (cached) return cached;
   const result = await selectProvider().getRates();
-  if (result.available) cache.set(cacheKey, result, 5 * 60 * 1000);
+  if (result.available) cache.set(cacheKey, result, env.MARKET_CACHE_TTL_SECONDS);
   return result;
 }
 

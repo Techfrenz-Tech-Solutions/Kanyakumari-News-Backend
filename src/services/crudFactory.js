@@ -7,7 +7,6 @@
  */
 const prisma = require('../config/prisma');
 const { ApiErrors } = require('../utils/apiError');
-const { logActivity } = require('./auditService');
 
 /**
  * @param {object} opts

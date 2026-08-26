@@ -1,8 +1,13 @@
 'use strict';
 
 const express = require('express');
-const { authenticateAdmin, requirePermission } = require('../../middleware/authenticate');
-const { singleFile, arrayFiles } = require('../../middleware/upload');
+const {
+  authenticateAdmin,
+  requirePermission,
+  requireArticleLifecyclePermission,
+  requireArticleInitialStatusPermission,
+} = require('../../middleware/authenticate');
+const { singleFile } = require('../../middleware/upload');
 
 const taxonomy = require('../../controllers/taxonomyController');
 const team = require('../../controllers/teamController');
@@ -66,11 +71,16 @@ router.delete('/media/:id', requirePermission('media', 'delete'), mediaCtrl.remo
 
 // ── News / Articles ─────────────────────────────────────────────────────────
 router.get('/news', requirePermission('news', 'view'), news.list);
-router.post('/news', requirePermission('news', 'create'), news.create);
+router.post(
+  '/news',
+  requirePermission('news', 'create'),
+  requireArticleInitialStatusPermission,
+  news.create
+);
 router.get('/news/:id', requirePermission('news', 'view'), news.get);
 router.put('/news/:id', requirePermission('news', 'edit'), news.update);
 router.delete('/news/:id', requirePermission('news', 'delete'), news.remove);
-router.post('/news/:id/status', requirePermission('news', 'edit'), news.changeStatus);
+router.post('/news/:id/status', requireArticleLifecyclePermission, news.changeStatus);
 
 // ── SEO ─────────────────────────────────────────────────────────────────────
 router.get('/seo', requirePermission('news', 'view'), news.listSeo);

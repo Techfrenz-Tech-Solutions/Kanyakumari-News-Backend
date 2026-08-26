@@ -13,6 +13,7 @@ const {
   publicContentLimiter,
   searchLimiter,
   authLimiter,
+  otpLimiter,
   commentLimiter,
   contactLimiter,
 } = require('../../middleware/rateLimiters');
@@ -72,8 +73,8 @@ router.post('/comments', commentLimiter, publicAuth.requireReader, publicAuth.cr
 
 // Reader auth (email/password + OTP)
 router.post('/auth/login', authLimiter, controller.readerLogin);
-router.post('/auth/otp/request', authLimiter, controller.otpRequest);
-router.post('/auth/otp/verify', authLimiter, controller.otpVerify);
+router.post('/auth/otp/request', otpLimiter, controller.otpRequest);
+router.post('/auth/otp/verify', otpLimiter, controller.otpVerify);
 
 // Contact
 router.post('/contact', contactLimiter, controller.contact);

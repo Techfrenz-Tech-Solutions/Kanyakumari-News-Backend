@@ -1,7 +1,7 @@
 'use strict';
 
 const prisma = require('../config/prisma');
-const { clientIp, hashIp } = require('../utils/ipHash');
+const { clientIp } = require('../utils/ipHash');
 
 /**
  * Audit logging for meaningful admin mutations + auth events.

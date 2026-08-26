@@ -16,15 +16,15 @@ class ApiError extends Error {
 }
 
 const ApiErrors = {
-  badRequest: (msg = 'Bad request', details = null) => new ApiError(400, 'BAD_REQUEST', msg, details),
+  badRequest: (msg = 'Bad request', code = 'BAD_REQUEST', details = null) => new ApiError(400, code, msg, details),
   validation: (details) => new ApiError(400, 'VALIDATION_ERROR', 'Invalid request', details),
-  unauthorized: (msg = 'Authentication required') => new ApiError(401, 'UNAUTHORIZED', msg),
-  invalidCredentials: () => new ApiError(401, 'INVALID_CREDENTIALS', 'Invalid email or password'),
+  unauthorized: (msg = 'Authentication required', code = 'UNAUTHORIZED') => new ApiError(401, code, msg),
+  invalidCredentials: (msg = 'Invalid email or password') => new ApiError(401, 'INVALID_CREDENTIALS', msg),
   forbidden: (msg = 'Permission denied') => new ApiError(403, 'FORBIDDEN', msg),
   notFound: (msg = 'Resource not found', code = 'NOT_FOUND') => new ApiError(404, code, msg),
   conflict: (msg = 'Conflict', code = 'CONFLICT') => new ApiError(409, code, msg),
   invalidTransition: (msg) => new ApiError(409, 'INVALID_STATUS_TRANSITION', msg),
-  tooMany: (msg = 'Too many requests') => new ApiError(429, 'RATE_LIMITED', msg),
+  tooMany: (msg = 'Too many requests', code = 'RATE_LIMITED') => new ApiError(429, code, msg),
   internal: () => new ApiError(500, 'INTERNAL_ERROR', 'Internal server error'),
   providerUnavailable: (name) =>
     new ApiError(503, 'PROVIDER_UNAVAILABLE', `${name} provider is not configured`),

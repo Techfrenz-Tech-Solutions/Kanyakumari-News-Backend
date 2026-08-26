@@ -48,6 +48,48 @@ function requirePermission(module, action) {
   };
 }
 
+const ARTICLE_ACTION_PERMISSIONS = Object.freeze({
+  submit: 'edit',
+  approve: 'approve',
+  reject: 'approve',
+  'publish-now': 'publish',
+  unpublish: 'publish',
+  'cancel-schedule': 'publish',
+});
+
+const ARTICLE_INITIAL_STATUS_PERMISSIONS = Object.freeze({
+  draft: null,
+  pending: 'edit',
+  scheduled: 'publish',
+  published: 'publish',
+});
+
+/** Action-aware guard for POST /news/:id/status. */
+function requireArticleLifecyclePermission(req, res, next) {
+  if (!req.user) return next(ApiErrors.unauthorized());
+  const action = req.body && req.body.action;
+  const permission = ARTICLE_ACTION_PERMISSIONS[action];
+  // Let request validation report unknown/missing actions as a 400.
+  if (!permission) return next();
+  if (!can(req.user, 'news', permission)) {
+    return next(ApiErrors.forbidden(`Requires news.${permission} permission`));
+  }
+  return next();
+}
+
+/** Prevent creation with a privileged initial lifecycle state. */
+function requireArticleInitialStatusPermission(req, res, next) {
+  if (!req.user) return next(ApiErrors.unauthorized());
+  const status = req.body && req.body.status;
+  const permission = ARTICLE_INITIAL_STATUS_PERMISSIONS[status];
+  // Missing/unknown status remains the validator's responsibility.
+  if (!permission) return next();
+  if (!can(req.user, 'news', permission)) {
+    return next(ApiErrors.forbidden(`Initial status "${status}" requires news.${permission} permission`));
+  }
+  return next();
+}
+
 /**
  * authenticateReader — valid Bearer access token for a public reader
  * (kind: 'reader'). Attaches req.reader. Used for comment creation.
@@ -76,4 +118,14 @@ async function authenticateReader(req, res, next) {
   }
 }
 
-module.exports = { authenticateAdmin, requirePermission, authenticateReader, can, permissionsFor };
+module.exports = {
+  authenticateAdmin,
+  requirePermission,
+  requireArticleLifecyclePermission,
+  requireArticleInitialStatusPermission,
+  ARTICLE_ACTION_PERMISSIONS,
+  ARTICLE_INITIAL_STATUS_PERMISSIONS,
+  authenticateReader,
+  can,
+  permissionsFor,
+};
