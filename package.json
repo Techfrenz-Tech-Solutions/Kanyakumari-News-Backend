@@ -29,12 +29,12 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.1",
-    "node-cron": "^3.0.3",
-    "nodemailer": "^6.9.16",
+    "node-cron": "^4.6.0",
+    "nodemailer": "^9.0.5",
     "pino": "^9.5.0",
     "pino-http": "^10.3.0",
     "sanitize-html": "^2.14.0",
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.3",
     "zod": "^3.24.1"
   },
   "devDependencies": {
