@@ -87,7 +87,9 @@ const OTP_PROVIDERS = Object.freeze({
 });
 
 function selectOtpProvider(name = env.OTP_PROVIDER) {
-  const provider = OTP_PROVIDERS[String(name).toLowerCase()];
+  const normalizedName = String(name).toLowerCase();
+  if (normalizedName === 'disabled') throw ApiErrors.providerUnavailable('OTP');
+  const provider = OTP_PROVIDERS[normalizedName];
   if (!provider) throw ApiErrors.providerUnavailable(`OTP (${name})`);
   if (env.IS_PROD) throw ApiErrors.providerUnavailable('OTP');
   return provider;

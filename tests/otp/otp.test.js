@@ -89,4 +89,8 @@ describe('reader OTP flow', () => {
   test('unsupported providers fail clearly', () => {
     expect(() => service.selectOtpProvider('not-implemented')).toThrow(expect.objectContaining({ status: 503 }));
   });
+
+  test('disabled provider fails closed without generating a code', () => {
+    expect(() => service.selectOtpProvider('disabled')).toThrow(expect.objectContaining({ status: 503 }));
+  });
 });

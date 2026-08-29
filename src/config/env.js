@@ -127,7 +127,7 @@ function validateEnv() {
     }
   }
 
-  if (!['console', 'dev'].includes(env.OTP_PROVIDER)) {
+  if (!['console', 'dev', 'disabled'].includes(env.OTP_PROVIDER)) {
     problems.push(`OTP_PROVIDER=${env.OTP_PROVIDER} is unsupported by this build`);
   }
   if (env.OTP_EXPIRY_MINUTES <= 0) problems.push('OTP_EXPIRY_MINUTES must be positive');
