@@ -87,10 +87,14 @@ async function resolveRefs(data) {
   // The admin Add/Edit News form posts a free-text subCategory, so we
   // auto-provision the subcategory under the resolved category when the
   // name is new (name is globally unique; first write wins).
-  if (data.subcategoryId !== undefined && data.subcategoryId !== null) {
-    const sub = await prisma.subcategory.findUnique({ where: { id: data.subcategoryId } });
-    if (!sub) throw ApiErrors.badRequest('Sub-category not found');
-    refs.subcategoryId = sub.id;
+  if (data.subcategoryId !== undefined) {
+    if (data.subcategoryId === null) {
+      refs.subcategoryId = null;
+    } else {
+      const sub = await prisma.subcategory.findUnique({ where: { id: data.subcategoryId } });
+      if (!sub) throw ApiErrors.badRequest('Sub-category not found');
+      refs.subcategoryId = sub.id;
+    }
   } else if (data.subCategory) {
     let sub = await prisma.subcategory.findUnique({ where: { name: data.subCategory } });
     if (!sub) {
@@ -123,8 +127,14 @@ async function resolveRefs(data) {
   }
 
   // area: areaId | area (slug or name)
-  if (data.areaId !== undefined && data.areaId !== null) {
-    refs.areaId = data.areaId;
+  if (data.areaId !== undefined) {
+    if (data.areaId === null) {
+      refs.areaId = null;
+    } else {
+      const area = await prisma.area.findUnique({ where: { id: data.areaId } });
+      if (!area) throw ApiErrors.badRequest('Area not found');
+      refs.areaId = area.id;
+    }
   } else if (data.area) {
     const area =
       (await prisma.area.findFirst({ where: { name: data.area } })) ||
@@ -318,6 +328,25 @@ async function updateArticle(id, data, req) {
   if (refs.authorId !== undefined) payload.authorId = refs.authorId;
   if (refs.areaId !== undefined) payload.areaId = refs.areaId;
   if (refs.featuredImageId !== undefined) payload.featuredImageId = refs.featuredImageId;
+
+  if (data.publishDate !== undefined || data.publishTime !== undefined || data.scheduledAt !== undefined) {
+    const scheduleInput = data.scheduledAt
+      ? { scheduledAt: data.scheduledAt }
+      : {
+          publishDate: data.publishDate ?? (existing.publishDate ? existing.publishDate.toISOString().slice(0, 10) : undefined),
+          publishTime: data.publishTime ?? existing.publishTime ?? undefined,
+        };
+    const schedule = splitDateTime(scheduleInput);
+    payload.publishDate = schedule.publishDate;
+    payload.publishTime = schedule.publishTime;
+    if (existing.status === 'scheduled') {
+      const scheduledAt = istInstant(schedule.publishDate, schedule.publishTime);
+      if (!scheduledAt || scheduledAt <= new Date()) {
+        throw ApiErrors.badRequest('Scheduled time must be in the future');
+      }
+      payload.publishedAt = scheduledAt;
+    }
+  }
 
   // Slug stability: only change when explicitly requested.
   if (data.slug && data.slug !== existing.slug) {
