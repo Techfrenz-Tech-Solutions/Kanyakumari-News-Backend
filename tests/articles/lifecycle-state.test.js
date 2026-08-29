@@ -10,9 +10,15 @@ jest.mock('../../src/utils/sanitizeHtml', () => ({
   wordCount: () => 0,
 }));
 
-const { TRANSITIONS, changeStatus } = require('../../src/services/articleService');
+const { TRANSITIONS, changeStatus, splitDateTime, istInstant } = require('../../src/services/articleService');
 
 describe('article lifecycle state machine', () => {
+  test('ISO scheduledAt round-trips without a 5.5-hour timezone shift', () => {
+    const instant = new Date('2026-08-29T15:01:00.000Z');
+    const fields = splitDateTime({ scheduledAt: instant.toISOString() });
+    expect(istInstant(fields.publishDate, fields.publishTime).toISOString()).toBe(instant.toISOString());
+  });
+
   const valid = [
     ['draft', 'submit', 'pending'],
     ['pending', 'approve', 'published'],

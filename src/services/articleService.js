@@ -208,8 +208,11 @@ function splitDateTime(data) {
   let publishTime = null;
   if (data.scheduledAt) {
     const d = new Date(data.scheduledAt);
-    publishDate = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-    publishTime = `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+    // Store IST wall-clock fields; istInstant() performs the inverse when
+    // deriving the absolute publication instant.
+    const ist = new Date(d.getTime() + IST_OFFSET_MS);
+    publishDate = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()));
+    publishTime = `${String(ist.getUTCHours()).padStart(2, '0')}:${String(ist.getUTCMinutes()).padStart(2, '0')}`;
   } else {
     if (data.publishDate) publishDate = new Date(`${data.publishDate}T00:00:00Z`);
     if (data.publishTime) publishTime = data.publishTime;
@@ -595,6 +598,8 @@ module.exports = {
   changeStatus,
   recordView,
   TRANSITIONS,
+  splitDateTime,
+  istInstant,
   DETAIL_INCLUDE,
   LIST_INCLUDE,
   SORT_MAP,
