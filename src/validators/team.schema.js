@@ -32,6 +32,16 @@ const departmentEnum = z.enum([
   'digital',
 ]);
 const permissionEnum = z.enum(['publish', 'approve', 'reject', 'edit', 'delete', 'create']);
+const userPermissionEnum = z.enum([
+  'news:view', 'news:create', 'news:edit', 'news:delete', 'news:publish', 'news:approve',
+  'categories:view', 'categories:create', 'categories:edit', 'categories:delete',
+  'reporters:view', 'reporters:create', 'reporters:edit', 'reporters:delete',
+  'media:view', 'media:upload', 'media:delete',
+  'ads:view', 'ads:create', 'ads:edit', 'ads:delete',
+  'comments:view', 'comments:moderate', 'comments:delete',
+  'users:view', 'users:create', 'users:edit', 'users:delete',
+  'settings:view', 'settings:edit',
+]);
 
 const reporterCreate = z.object({
   name: z.string().trim().min(1).max(120),
@@ -84,14 +94,15 @@ const userCreate = z.object({
   status: statusEnum.default('active'),
   // Optional initial password when creating a user directly (invite flow can omit it).
   password: z.string().min(8).max(200).optional(),
-  extraPermissions: z.array(z.string()).max(64).optional(),
-});
+  extraPermissions: z.array(userPermissionEnum).max(32).optional(),
+}).strict();
 
-const userUpdate = userCreate
+const userUpdate = userCreate.omit({ password: true })
   .partial()
   .extend({
-    extraPermissions: z.array(z.string()).max(64).nullable().optional(),
-  });
+    extraPermissions: z.array(userPermissionEnum).max(32).nullable().optional(),
+  })
+  .strict();
 
 module.exports = {
   reporterCreate,

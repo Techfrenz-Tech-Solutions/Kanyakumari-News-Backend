@@ -13,8 +13,8 @@ async function main() {
   // Verify DB connectivity at boot.
   await prisma.$queryRaw`SELECT 1`;
 
-  const server = app.listen(env.PORT, () => {
-    logger.info({ port: env.PORT, env: env.NODE_ENV }, 'Kanyakumari News backend listening');
+  const server = app.listen(env.PORT, env.HOST, () => {
+    logger.info({ host: env.HOST, port: env.PORT, env: env.NODE_ENV }, 'Kanyakumari News backend listening');
   });
 
   if (env.ENABLE_SCHEDULER) {
@@ -34,11 +34,14 @@ async function main() {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('unhandledRejection', (reason) => {
-    logger.error({ reason: String(reason) }, 'unhandled rejection');
+    logger.error(
+      env.IS_PROD ? {} : { reason: reason instanceof Error ? reason.message : String(reason) },
+      'unhandled rejection'
+    );
   });
 }
 
 main().catch((err) => {
-  console.error('Fatal startup error:', err);
+  logger.fatal(env.IS_PROD ? {} : { err }, 'fatal startup error');
   process.exit(1);
 });

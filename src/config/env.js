@@ -27,6 +27,7 @@ const env = {
   IS_PROD,
   IS_TEST,
   PORT: int(process.env.PORT, 3000),
+  HOST: process.env.HOST || (IS_PROD ? '127.0.0.1' : '0.0.0.0'),
   API_BASE_URL: process.env.API_BASE_URL || `http://localhost:${int(process.env.PORT, 3000)}`,
   TRUST_PROXY: process.env.TRUST_PROXY ? int(process.env.TRUST_PROXY, 1) : 1,
 
@@ -97,6 +98,9 @@ function validateEnv() {
   }
 
   if (IS_PROD) {
+    if (['0.0.0.0', '::', '[::]'].includes(env.HOST)) {
+      problems.push('HOST must not be a wildcard address in production');
+    }
     if (!env.JWT_ACCESS_SECRET || env.JWT_ACCESS_SECRET.length < 32) {
       problems.push('JWT_ACCESS_SECRET must be set (>= 32 chars) in production');
     }

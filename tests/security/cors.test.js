@@ -31,5 +31,5 @@ test('CORS permits configured/no-origin calls and rejects unknown origins', () =
 
   const rejected = jest.fn();
   corsOptions.origin('https://attacker.example', rejected);
-  expect(rejected.mock.calls[0][0]).toBeInstanceOf(Error);
+  expect(rejected.mock.calls[0][0]).toMatchObject({ status: 403, code: 'FORBIDDEN' });
 });

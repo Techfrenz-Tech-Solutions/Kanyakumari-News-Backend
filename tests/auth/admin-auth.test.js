@@ -54,7 +54,7 @@ describe('admin authentication fundamentals', () => {
     });
     mockVerify.mockResolvedValue(true);
     await expect(login({ email: 'inactive@example.com', password: 'secret' }, req))
-      .rejects.toMatchObject({ status: 401 });
+      .rejects.toMatchObject({ status: 401, code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' });
     expect(mockTokenService.issueRefreshToken).not.toHaveBeenCalled();
   });
 });

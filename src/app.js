@@ -16,6 +16,7 @@ const prisma = require('./config/prisma');
 const logger = require('./utils/logger');
 const { globalLimiter } = require('./middleware/rateLimiters');
 const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
+const { ApiErrors } = require('./utils/apiError');
 
 // Route modules
 const healthRouter = require('./routes/health');
@@ -29,7 +30,7 @@ const corsOptions = {
   origin: (origin, cb) => {
     // Allow same-origin / curl / server-to-server (no Origin header)
     if (!origin || env.CORS_ORIGINS.includes(origin)) return cb(null, true);
-    return cb(new Error(`CORS: origin ${origin} not allowed`));
+    return cb(ApiErrors.forbidden('Origin not allowed'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

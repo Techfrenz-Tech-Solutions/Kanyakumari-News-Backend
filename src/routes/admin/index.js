@@ -20,6 +20,14 @@ const router = express.Router();
 // Everything under /api/admin requires an authenticated admin.
 router.use(authenticateAdmin);
 
+// Prevent parseInt-style coercion (for example, "12abc" becoming record 12).
+router.param('id', (req, _res, next, value) => {
+  if (!/^[1-9]\d*$/.test(value)) {
+    return next(require('../../utils/apiError').ApiErrors.badRequest('Invalid resource id'));
+  }
+  return next();
+});
+
 // ── Taxonomy ────────────────────────────────────────────────────────────────
 router.get('/categories', requirePermission('categories', 'view'), taxonomy.categories.list);
 router.post('/categories', requirePermission('categories', 'create'), taxonomy.categories.create);

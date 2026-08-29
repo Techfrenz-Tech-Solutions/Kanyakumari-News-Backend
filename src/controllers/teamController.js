@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const { hash } = require('@node-rs/argon2');
 const prisma = require('../config/prisma');
 const { ApiErrors, asyncHandler } = require('../utils/apiError');
@@ -16,6 +17,19 @@ const {
   userUpdate,
 } = require('../validators/team.schema');
 const { ARGON2_OPTS } = require('../services/authService');
+
+function assertUserUpdateAllowed(actor, target, changes) {
+  if (actor.role === 'super_admin') return;
+  if (target.role === 'super_admin') {
+    throw ApiErrors.forbidden('Only a Super Admin can modify a Super Admin account');
+  }
+  if (changes.role === 'super_admin') {
+    throw ApiErrors.forbidden('Only a Super Admin can assign the Super Admin role');
+  }
+  if (changes.extraPermissions !== undefined) {
+    throw ApiErrors.forbidden('Only a Super Admin can change additional permissions');
+  }
+}
 
 // ─────────────────────────── REPORTERS ───────────────────────────
 
@@ -232,7 +246,7 @@ const users = {
 
     // Invite flow: if no password supplied, generate a temporary one (returned once).
     let tempPassword = null;
-    const password = data.password || `KKN-${Math.random().toString(36).slice(2, 12)}`;
+    const password = data.password || `KKN-${crypto.randomBytes(12).toString('base64url')}`;
     if (!data.password) tempPassword = password;
 
     const passwordHash = await hash(password, ARGON2_OPTS);
@@ -271,6 +285,8 @@ const users = {
     const existing = await prisma.user.findUnique({ where: { id } });
     if (!existing) throw ApiErrors.notFound('User not found');
 
+    assertUserUpdateAllowed(req.user, existing, data);
+
     const row = await prisma.user.update({
       where: { id },
       data: {
@@ -298,4 +314,4 @@ const users = {
   }),
 };
 
-module.exports = { reporters, authors, editors, users };
+module.exports = { reporters, authors, editors, users, assertUserUpdateAllowed };

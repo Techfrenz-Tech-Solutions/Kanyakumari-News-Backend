@@ -44,5 +44,8 @@
     "jest": "^30.4.2",
     "prisma": "^6.2.1",
     "supertest": "^7.2.2"
+  },
+  "overrides": {
+    "deepmerge-ts": "8.0.2"
   }
 }

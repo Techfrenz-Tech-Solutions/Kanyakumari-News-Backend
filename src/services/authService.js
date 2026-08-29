@@ -47,7 +47,8 @@ async function login({ email, password }, req) {
   }
 
   if (user.status !== 'active') {
-    throw ApiErrors.unauthorized('Account is deactivated');
+    await logActivity({ req, userId: user.id, action: 'auth.login.failed', module: 'auth', record: user.email });
+    throw ApiErrors.invalidCredentials();
   }
 
   const ip = clientIp(req);
@@ -65,10 +66,7 @@ async function login({ email, password }, req) {
 }
 
 async function refresh(req) {
-  const presented =
-    (req.cookies && req.cookies[env.REFRESH_COOKIE_NAME]) ||
-    (req.body && req.body.refreshToken) ||
-    null;
+  const presented = (req.cookies && req.cookies[env.REFRESH_COOKIE_NAME]) || null;
 
   const result = await tokenService.rotateRefreshToken(presented, clientIp(req));
   if (!result) {

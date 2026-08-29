@@ -6,6 +6,7 @@ const tokenService = require('../../services/tokenService');
 const { authenticateAdmin } = require('../../middleware/authenticate');
 const { asyncHandler } = require('../../utils/apiError');
 const { authLimiter, refreshLimiter } = require('../../middleware/rateLimiters');
+const env = require('../../config/env');
 const {
   loginSchema,
   refreshSchema,
@@ -45,7 +46,7 @@ router.post(
   '/refresh',
   refreshLimiter,
   asyncHandler(async (req, res) => {
-    refreshSchema.parse({ refreshToken: req.cookies?.kkn_refresh || req.body?.refreshToken });
+    refreshSchema.parse({ refreshToken: req.cookies?.[env.REFRESH_COOKIE_NAME] });
     const result = await authService.refresh(req);
     tokenService.setRefreshCookie(res, result.refreshToken);
     res.json({
@@ -81,6 +82,7 @@ router.get(
 // POST /api/admin/auth/forgot-password
 router.post(
   '/forgot-password',
+  authLimiter,
   asyncHandler(async (req, res) => {
     const { email } = forgotPasswordSchema.parse(req.body);
     const result = await authService.forgotPassword({ email }, req);
@@ -91,6 +93,7 @@ router.post(
 // POST /api/admin/auth/reset-password
 router.post(
   '/reset-password',
+  authLimiter,
   asyncHandler(async (req, res) => {
     const { token, newPassword } = resetPasswordSchema.parse(req.body);
     const result = await authService.resetPassword({ token, newPassword });

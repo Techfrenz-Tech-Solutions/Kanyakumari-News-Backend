@@ -97,53 +97,72 @@ async function processUpload(fileSource, originalName, sizeBytes, { kind = null,
     throw ApiErrors.badRequest('PDF upload must be a real PDF file');
   }
 
+  let width = null;
+  let height = null;
+  let thumbnailBuffer = null;
+
+  // A magic-byte prefix alone is insufficient: fully decode images before any
+  // bytes are persisted, so truncated or malformed payloads cannot be stored.
+  if (resolvedKind === 'image') {
+    try {
+      const image = sharp(buffer, { failOn: 'error' });
+      const meta = await image.metadata();
+      await image.toBuffer();
+      width = meta.width || null;
+      height = meta.height || null;
+      thumbnailBuffer = await sharp(buffer, { failOn: 'error' })
+        .resize({ width: env.THUMBNAIL_WIDTH, withoutEnlargement: true })
+        .jpeg({ quality: 82, progressive: true })
+        .toBuffer();
+    } catch {
+      throw ApiErrors.badRequest('Image file is malformed or could not be decoded');
+    }
+  }
+
   // Build storage key with the REAL detected extension (never trust original).
   const cleanBase = String(originalName || 'file').replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-60);
   const key = `${keyFromFileName(cleanBase)}.${detected.ext}`;
 
   const { url, size } = await localStorage.save(key, buffer);
-
-  let width = null;
-  let height = null;
   let thumbnailUrl = null;
   let thumbnailKey = null;
 
-  if (resolvedKind === 'image') {
+  if (thumbnailBuffer) {
     try {
-      const meta = await sharp(buffer).metadata();
-      width = meta.width || null;
-      height = meta.height || null;
-
-      // Card thumbnail derivative (640px wide, progressive JPEG).
       const thumbKey = `${key.replace(/\.[^.]+$/, '')}-640.jpg`;
-      const thumbBuf = await sharp(buffer)
-        .resize({ width: env.THUMBNAIL_WIDTH, withoutEnlargement: true })
-        .jpeg({ quality: 82, progressive: true })
-        .toBuffer();
-      await localStorage.save(thumbKey, thumbBuf);
+      await localStorage.save(thumbKey, thumbnailBuffer);
       thumbnailKey = thumbKey;
       thumbnailUrl = localStorage.getPublicUrl(thumbKey);
     } catch (err) {
-      // Non-fatal: thumbnail generation failed but original is fine.
+      // Non-fatal storage failure: the already-validated original remains usable.
       console.warn('[media] thumbnail generation failed:', err.message);
     }
   }
 
-  const row = await prisma.media.create({
-    data: {
-      name: String(originalName || 'file').slice(0, 255),
-      key,
-      url,
-      mimeType: detected.mime,
-      sizeBytes: sizeBytes || size,
-      kind: resolvedKind,
-      width,
-      height,
-      thumbnailKey,
-      thumbnailUrl,
-      uploadedById: userId || null,
-    },
-  });
+  let row;
+  try {
+    row = await prisma.media.create({
+      data: {
+        name: String(originalName || 'file').slice(0, 255),
+        key,
+        url,
+        mimeType: detected.mime,
+        sizeBytes: sizeBytes || size,
+        kind: resolvedKind,
+        width,
+        height,
+        thumbnailKey,
+        thumbnailUrl,
+        uploadedById: userId || null,
+      },
+    });
+  } catch (err) {
+    await Promise.allSettled([
+      localStorage.delete(key),
+      ...(thumbnailKey ? [localStorage.delete(thumbnailKey)] : []),
+    ]);
+    throw err;
+  }
 
   if (req) {
     await logActivity({
