@@ -29,6 +29,8 @@ const env = {
   PORT: int(process.env.PORT, 3000),
   HOST: process.env.HOST || (IS_PROD ? '127.0.0.1' : '0.0.0.0'),
   API_BASE_URL: process.env.API_BASE_URL || `http://localhost:${int(process.env.PORT, 3000)}`,
+  ALLOW_INSECURE_HTTP: bool(process.env.ALLOW_INSECURE_HTTP, false),
+  COOKIE_SECURE: bool(process.env.COOKIE_SECURE, IS_PROD),
   TRUST_PROXY: process.env.TRUST_PROXY ? int(process.env.TRUST_PROXY, 1) : 1,
 
   DATABASE_URL: process.env.DATABASE_URL || '',
@@ -113,8 +115,8 @@ function validateEnv() {
     if (['console', 'dev'].includes(env.OTP_PROVIDER)) {
       problems.push('development OTP providers are not allowed in production');
     }
-    if (!env.API_BASE_URL.startsWith('https://')) {
-      problems.push('API_BASE_URL should use https in production');
+    if (!env.API_BASE_URL.startsWith('https://') && !env.ALLOW_INSECURE_HTTP) {
+      problems.push('API_BASE_URL should use https in production unless ALLOW_INSECURE_HTTP=true is explicitly set');
     }
   } else {
     // Development convenience: generate one-time ephemeral secrets so the app can boot,

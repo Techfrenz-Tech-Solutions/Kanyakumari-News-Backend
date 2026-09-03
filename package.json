@@ -16,8 +16,8 @@
     "prisma:validate": "prisma validate",
     "seed": "node prisma/seed.js",
     "lint": "eslint \"src/**/*.js\" \"tests/**/*.js\" \"tests-integration/**/*.js\" \"scripts/**/*.js\" \"prisma/*.js\" server.js",
-    "test": "jest --runInBand && node scripts/run-integration-tests.js",
-    "test:unit": "jest --runInBand",
+    "test": "NODE_ENV=test OTP_PROVIDER=console jest --runInBand && node scripts/run-integration-tests.js",
+    "test:unit": "NODE_ENV=test OTP_PROVIDER=console jest --runInBand",
     "test:integration": "node scripts/run-integration-tests.js"
   },
   "dependencies": {

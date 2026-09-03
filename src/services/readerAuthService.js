@@ -32,7 +32,7 @@ function readerJwt(user) {
 function setReaderCookie(res, token) {
   res.cookie('reader_token', token, {
     httpOnly: true,
-    secure: env.IS_PROD,
+    secure: env.COOKIE_SECURE,
     sameSite: 'lax',
     path: '/',
     maxAge: 7 * 24 * 3600 * 1000,
