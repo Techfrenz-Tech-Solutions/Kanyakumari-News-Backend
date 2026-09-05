@@ -31,7 +31,7 @@ function hashToken(token) {
 
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: env.IS_PROD,
+  secure: env.COOKIE_SECURE,
   sameSite: 'strict',
   path: '/api', // refresh endpoint lives under /api/admin/auth
   maxAge: env.REFRESH_TOKEN_EXPIRES_DAYS * 24 * 60 * 60 * 1000,

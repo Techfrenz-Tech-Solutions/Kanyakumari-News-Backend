@@ -31,6 +31,17 @@ function assertUserUpdateAllowed(actor, target, changes) {
   }
 }
 
+async function assertReporterAvatarExists(avatarId) {
+  if (avatarId === undefined || avatarId === null) return;
+  const avatar = await prisma.media.findUnique({
+    where: { id: avatarId },
+    select: { id: true },
+  });
+  if (!avatar) {
+    throw ApiErrors.badRequest('Avatar media not found', 'AVATAR_NOT_FOUND');
+  }
+}
+
 // ─────────────────────────── REPORTERS ───────────────────────────
 
 const reporters = {
@@ -45,6 +56,7 @@ const reporters = {
 
   create: asyncHandler(async (req, res) => {
     const data = reporterCreate.parse(req.body);
+    await assertReporterAvatarExists(data.avatarId);
     const row = await prisma.reporter.create({
       data: {
         name: data.name,
@@ -78,6 +90,7 @@ const reporters = {
     const id = parseInt(req.params.id, 10);
     const existing = await prisma.reporter.findUnique({ where: { id } });
     if (!existing) throw ApiErrors.notFound('Reporter not found');
+    await assertReporterAvatarExists(data.avatarId);
     const row = await prisma.reporter.update({
       where: { id },
       data: {
@@ -314,4 +327,4 @@ const users = {
   }),
 };
 
-module.exports = { reporters, authors, editors, users, assertUserUpdateAllowed };
+module.exports = { reporters, authors, editors, users, assertUserUpdateAllowed, assertReporterAvatarExists };
