@@ -202,6 +202,48 @@ function buildSanitized(data) {
   return out;
 }
 
+async function syncBreakingReference(client, article) {
+  if (!client.breakingNews || !article?.id) return;
+
+  if (article.status === 'published' && article.isBreaking) {
+    const existing = await client.breakingNews.findFirst({ where: { articleId: article.id } });
+    let activeId = existing?.id || null;
+    if (existing) {
+      await client.breakingNews.update({
+        where: { id: existing.id },
+        data: {
+          headline: article.title,
+          categoryId: article.categoryId,
+          status: 'live',
+          endTime: null,
+        },
+      });
+    } else {
+      const created = await client.breakingNews.create({
+        data: {
+          headline: article.title,
+          articleId: article.id,
+          categoryId: article.categoryId,
+          status: 'live',
+        },
+      });
+      activeId = created.id;
+    }
+    if (activeId) {
+      await client.breakingNews.updateMany({
+        where: { articleId: article.id, id: { not: activeId }, status: { not: 'ended' } },
+        data: { status: 'ended', endTime: new Date() },
+      });
+    }
+    return;
+  }
+
+  await client.breakingNews.updateMany({
+    where: { articleId: article.id, status: { not: 'ended' } },
+    data: { status: 'ended', endTime: new Date() },
+  });
+}
+
 function splitDateTime(data) {
   // publishDate (YYYY-MM-DD) + publishTime (HH:MM) — both expressed in IST.
   let publishDate = null; // Date set to UTC midnight of the IST calendar date
@@ -290,8 +332,11 @@ async function createArticle(data, req) {
     if (data.tags !== undefined) {
       await syncTags(tx, created.id, data.tags);
       await tx.article.update({ where: { id: created.id }, data: {} }); // touch updated_at
-      return tx.article.findUnique({ where: { id: created.id }, include: DETAIL_INCLUDE });
+      const tagged = await tx.article.findUnique({ where: { id: created.id }, include: DETAIL_INCLUDE });
+      await syncBreakingReference(tx, tagged);
+      return tagged;
     }
+    await syncBreakingReference(tx, created);
     return created;
   });
 
@@ -369,8 +414,11 @@ async function updateArticle(id, data, req) {
     });
     if (data.tags !== undefined) {
       await syncTags(tx, id, data.tags);
-      return tx.article.findUnique({ where: { id }, include: DETAIL_INCLUDE });
+      const tagged = await tx.article.findUnique({ where: { id }, include: DETAIL_INCLUDE });
+      await syncBreakingReference(tx, tagged);
+      return tagged;
     }
+    await syncBreakingReference(tx, updated);
     return updated;
   });
 
@@ -534,7 +582,8 @@ async function changeStatus(id, { action, reason }, req) {
     data.rejectionReason = null;
   }
 
-  const updated = await prisma.article.update({ where: { id }, data, include: { category: true } });
+  const updated = await prisma.article.update({ where: { id }, data, include: DETAIL_INCLUDE });
+  await syncBreakingReference(prisma, updated);
 
   await logActivity({
     req,

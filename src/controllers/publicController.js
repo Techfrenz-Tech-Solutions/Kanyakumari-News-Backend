@@ -20,7 +20,6 @@ const mailService = require('../services/mailService');
 const {
   publicArticleSummary,
   publicArticleDetail,
-  breakingDto,
 } = require('../mappers/news');
 const { publicCategory } = require('../mappers/taxonomy');
 const { clientIp } = require('../utils/ipHash');
@@ -54,28 +53,17 @@ const home = asyncHandler(async (req, res) => {
   const scope = publicScope(now);
   const [hero, breaking, latestRows, latestTotal, categories, areas, ads, settings] =
     await Promise.all([
-      // Hero: featured first, fallback to latest
       prisma.article.findMany({
-        where: { ...scope, isFeatured: true },
+        where: { ...scope, isBreaking: true },
         orderBy: { publishedAt: 'desc' },
         take: 5,
         include: articleService.LIST_INCLUDE,
-      }).then(async (rows) => {
-        if (rows.length >= 3) return rows;
-        const more = await prisma.article.findMany({
-          where: { ...scope },
-          orderBy: { publishedAt: 'desc' },
-          take: 5,
-          include: articleService.LIST_INCLUDE,
-        });
-        const seen = new Set(rows.map((r) => r.id));
-        return [...rows, ...more.filter((m) => !seen.has(m.id))].slice(0, 5);
       }),
-      prisma.breakingNews.findMany({
-        where: { status: 'live' },
-        orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
+      prisma.article.findMany({
+        where: { ...scope, isBreaking: true },
+        orderBy: { publishedAt: 'desc' },
         take: 8,
-        include: { article: true },
+        include: articleService.LIST_INCLUDE,
       }),
       prisma.article.findMany({
         where: scope,
@@ -84,7 +72,11 @@ const home = asyncHandler(async (req, res) => {
         include: articleService.LIST_INCLUDE,
       }),
       prisma.article.count({ where: scope }),
-      prisma.category.findMany({ where: { status: 'active' }, orderBy: { sortOrder: 'asc' } }),
+      prisma.category.findMany({
+        where: { status: 'active' },
+        orderBy: { sortOrder: 'asc' },
+        include: { subcategories: { where: { status: 'active' }, orderBy: { name: 'asc' } } },
+      }),
       prisma.area.findMany({ orderBy: { name: 'asc' } }),
       getActiveAds(),
       prisma.siteSettings.findUnique({ where: { id: 1 } }),
@@ -95,7 +87,7 @@ const home = asyncHandler(async (req, res) => {
     success: true,
     data: {
       hero: hero.map(publicArticleSummary),
-      breaking: breaking.map(breakingDto),
+      breaking: breaking.map(publicArticleSummary),
       latest: {
         items: latestRows.map(publicArticleSummary),
         hasMore: 9 < latestTotal,
@@ -121,36 +113,25 @@ const home = asyncHandler(async (req, res) => {
 const hero = asyncHandler(async (req, res) => {
   const now = new Date();
   const scope = publicScope(now);
-  let rows = await prisma.article.findMany({
-    where: { ...scope, isFeatured: true },
+  const rows = await prisma.article.findMany({
+    where: { ...scope, isBreaking: true },
     orderBy: { publishedAt: 'desc' },
     take: 5,
     include: articleService.LIST_INCLUDE,
   });
-  if (rows.length < 3) {
-    const more = await prisma.article.findMany({
-      where: scope,
-      orderBy: { publishedAt: 'desc' },
-      take: 5,
-      include: articleService.LIST_INCLUDE,
-    });
-    const seen = new Set(rows.map((r) => r.id));
-    rows = [...rows, ...more.filter((m) => !seen.has(m.id))].slice(0, 5);
-  }
   res.json({ success: true, data: rows.map(publicArticleSummary) });
 });
 
 // ══════════════════════════ BREAKING ══════════════════════════
 
 const breaking = asyncHandler(async (req, res) => {
-  const rows = await prisma.breakingNews.findMany({
-    where: { status: 'live' },
-    orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
+  const rows = await prisma.article.findMany({
+    where: { ...publicScope(), isBreaking: true },
+    orderBy: { publishedAt: 'desc' },
     take: 10,
-    include: { article: true },
+    include: articleService.LIST_INCLUDE,
   });
-  // Ticker items: { title, slug, breaking: true }
-  res.json({ success: true, data: rows.map(breakingDto) });
+  res.json({ success: true, data: rows.map(publicArticleSummary) });
 });
 
 // ══════════════════════════ NEWS LIST ══════════════════════════
@@ -172,6 +153,14 @@ const newsList = asyncHandler(async (req, res) => {
   if (req.query.area) {
     const area = await requireArea(req.query.area);
     scope.areaId = area.id;
+  }
+  if (req.query.subcategory) {
+    const subcategory = await prisma.subcategory.findUnique({ where: { slug: req.query.subcategory } });
+    if (!subcategory) {
+      res.json({ success: true, data: { items: [], hasMore: false, total: 0 } });
+      return;
+    }
+    scope.subcategoryId = subcategory.id;
   }
 
   const [items, total] = await Promise.all([
@@ -293,6 +282,7 @@ const categories = asyncHandler(async (req, res) => {
   const rows = await prisma.category.findMany({
     where: { status: 'active' },
     orderBy: { sortOrder: 'asc' },
+    include: { subcategories: { where: { status: 'active' }, orderBy: { name: 'asc' } } },
   });
   res.json({ success: true, data: rows.map(publicCategory) });
 });

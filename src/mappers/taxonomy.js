@@ -29,6 +29,12 @@ function publicCategory(row) {
   return {
     slug: row.slug,
     label: row.name,
+    subcategories: (row.subcategories || [])
+      .filter((subcategory) => subcategory.status === 'active')
+      .map((subcategory) => ({
+        slug: subcategory.slug,
+        label: subcategory.name,
+      })),
   };
 }
 
