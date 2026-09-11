@@ -44,6 +44,7 @@ enum ArticleStatus {
 enum MediaType {
   image
   pdf
+  video
 }
 
 enum VideoType {
@@ -388,6 +389,7 @@ model Article {
   location       String?       @db.VarChar(120)
   featuredImageId Int?         @map("featured_image_id")
   featuredImage   Media?        @relation("ArticleFeaturedImage", fields: [featuredImageId], references: [id], onDelete: SetNull)
+  videoUrl        String?       @map("video_url") @db.VarChar(500)
   isBreaking     Boolean       @default(false) @map("is_breaking")
   isFeatured     Boolean       @default(false) @map("is_featured")
   status         ArticleStatus @default(draft)

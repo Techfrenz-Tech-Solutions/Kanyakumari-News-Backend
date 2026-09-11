@@ -43,6 +43,22 @@ function detectMime(buffer) {
   const pdf = head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46;
   if (pdf) return { mime: 'application/pdf', ext: 'pdf' };
 
+  const ftyp =
+    head.length >= 12 &&
+    head[4] === 0x66 &&
+    head[5] === 0x74 &&
+    head[6] === 0x79 &&
+    head[7] === 0x70;
+  if (ftyp) {
+    const brand = buffer.subarray(8, 12).toString('ascii');
+    if (['isom', 'iso2', 'mp41', 'mp42', 'avc1', 'M4V ', 'M4A ', 'qt  '].includes(brand)) {
+      return { mime: brand === 'qt  ' ? 'video/quicktime' : 'video/mp4', ext: brand === 'qt  ' ? 'mov' : 'mp4' };
+    }
+  }
+
+  const webm = head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3;
+  if (webm) return { mime: 'video/webm', ext: 'webm' };
+
   return null;
 }
 
@@ -50,13 +66,19 @@ function isImage(mime) {
   return mime === 'image/png' || mime === 'image/jpeg' || mime === 'image/webp';
 }
 
+function isVideo(mime) {
+  return mime === 'video/mp4' || mime === 'video/webm' || mime === 'video/quicktime';
+}
+
+const ALLOWED_KINDS = new Set(['image', 'pdf', 'video']);
+
 /**
  * Process a single uploaded file (multer memory or disk file).
  * @param {string|Buffer} fileSource path or buffer
  * @param {string} originalName
  * @param {number} sizeBytes
  * @param {object} [opts]
- * @param {string|null} opts.kind 'image' | 'pdf' | null (auto)
+ * @param {string|null} opts.kind 'image' | 'pdf' | 'video' | null (auto)
  * @param {number|null} opts.userId
  * @returns {Promise<Media row>}
  */
@@ -76,16 +98,24 @@ async function processUpload(fileSource, originalName, sizeBytes, { kind = null,
     throw ApiErrors.badRequest('Unsupported or unrecognized file format');
   }
 
-  const resolvedKind = kind || (isImage(detected.mime) ? 'image' : 'pdf');
+  const requestedKind = kind ? String(kind).trim().toLowerCase() : null;
+  if (requestedKind && !ALLOWED_KINDS.has(requestedKind)) {
+    throw ApiErrors.badRequest('Unsupported media kind');
+  }
+
+  const resolvedKind = requestedKind || (isImage(detected.mime) ? 'image' : isVideo(detected.mime) ? 'video' : 'pdf');
 
   // Enforce size limits by kind.
-  const maxBytes =
+  const limitMb =
     resolvedKind === 'pdf'
-      ? env.MAX_PDF_UPLOAD_MB * 1024 * 1024
-      : env.MAX_IMAGE_UPLOAD_MB * 1024 * 1024;
+      ? env.MAX_PDF_UPLOAD_MB
+      : resolvedKind === 'video'
+        ? env.MAX_VIDEO_UPLOAD_MB
+        : env.MAX_IMAGE_UPLOAD_MB;
+  const maxBytes = limitMb * 1024 * 1024;
   if (sizeBytes > maxBytes) {
     throw ApiErrors.badRequest(
-      `File exceeds the ${Math.round(maxBytes / 1024 / 1024)} MB limit for ${resolvedKind === 'pdf' ? 'PDF' : 'image'} uploads`
+      `File exceeds the ${Math.round(maxBytes / 1024 / 1024)} MB limit for ${resolvedKind} uploads`
     );
   }
 
@@ -95,6 +125,9 @@ async function processUpload(fileSource, originalName, sizeBytes, { kind = null,
   }
   if (resolvedKind === 'pdf' && detected.mime !== 'application/pdf') {
     throw ApiErrors.badRequest('PDF upload must be a real PDF file');
+  }
+  if (resolvedKind === 'video' && !isVideo(detected.mime)) {
+    throw ApiErrors.badRequest('Video upload must be MP4, WebM or QuickTime');
   }
 
   let width = null;
@@ -234,4 +267,5 @@ module.exports = {
   mediaDto,
   detectMime,
   isImage,
+  isVideo,
 };

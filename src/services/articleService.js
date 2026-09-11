@@ -197,6 +197,7 @@ function buildSanitized(data) {
   if (data.excerptTA !== undefined) out.excerptTa = data.excerptTA || null;
   if (data.contentTA !== undefined) out.contentTa = data.contentTA ? sanitizeArticleHtml(data.contentTA) : null;
   if (data.location !== undefined) out.location = data.location || null;
+  if (data.videoUrl !== undefined) out.videoUrl = data.videoUrl || null;
   if (data.isBreaking !== undefined) out.isBreaking = data.isBreaking;
   if (data.isFeatured !== undefined) out.isFeatured = data.isFeatured;
   return out;
@@ -319,6 +320,7 @@ async function createArticle(data, req) {
         authorId: refs.authorId,
         location: data.location || null,
         featuredImageId: refs.featuredImageId ?? null,
+        videoUrl: data.videoUrl || null,
         isBreaking: data.isBreaking || false,
         isFeatured: data.isFeatured || false,
         status,

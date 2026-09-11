@@ -56,4 +56,29 @@ describe('article edit relational and scheduling round-trip', () => {
     }));
     expect(result.status).toBe('scheduled');
   });
+
+  test('editing an article can set and clear videoUrl', async () => {
+    const client = {
+      article: {
+        update: jest.fn(({ data }) => Promise.resolve({ id: 9, slug: 'story', ...data })),
+      },
+    };
+    mockPrisma.article.findUnique.mockResolvedValue({
+      id: 9,
+      slug: 'story',
+      title: 'Story',
+      status: 'draft',
+    });
+    mockPrisma.$transaction.mockImplementation((callback) => callback(client));
+
+    await updateArticle(9, { videoUrl: 'https://cdn.example.com/story.mp4' }, { user: { id: 1 } });
+    expect(client.article.update).toHaveBeenLastCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ videoUrl: 'https://cdn.example.com/story.mp4' }),
+    }));
+
+    await updateArticle(9, { videoUrl: null }, { user: { id: 1 } });
+    expect(client.article.update).toHaveBeenLastCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ videoUrl: null }),
+    }));
+  });
 });
