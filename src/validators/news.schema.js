@@ -45,6 +45,7 @@ const articleBase = z.object({
 
   image: z.string().trim().url().optional().nullable(),
   featuredImageId: z.number().int().positive().optional().nullable(),
+  videoUrl: z.string().trim().url().max(500).optional().nullable(),
 
   category: z.string().trim().min(1).optional(),
   categoryId: z.number().int().positive().optional(),

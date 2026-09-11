@@ -87,6 +87,46 @@ describe('article tag persistence', () => {
     expect(adminArticle(result).tags).toEqual(['local']);
   });
 
+  test('create persists and maps article videoUrl', async () => {
+    mockPrisma.category.findUnique.mockResolvedValue({ id: 1 });
+    mockPrisma.reporter.findUnique.mockResolvedValue({ id: 2 });
+    mockPrisma.article.findMany.mockResolvedValue([]);
+    const client = tagClient();
+    const base = {
+      id: 10,
+      slug: 'video-story',
+      title: 'Video Story',
+      excerpt: 'Excerpt',
+      content: '<p>Body</p>',
+      categoryId: 1,
+      authorId: 2,
+      status: 'draft',
+      videoUrl: 'http://localhost:3000/uploads/video.mp4',
+      tags: [],
+    };
+    client.article = {
+      create: jest.fn().mockResolvedValue(base),
+      update: jest.fn().mockResolvedValue(base),
+      findUnique: jest.fn().mockResolvedValue(base),
+    };
+    mockPrisma.$transaction.mockImplementation((callback) => callback(client));
+
+    const result = await createArticle({
+      title: 'Video Story',
+      excerpt: 'Excerpt',
+      content: '<p>Body</p>',
+      categoryId: 1,
+      authorId: 2,
+      status: 'draft',
+      videoUrl: 'http://localhost:3000/uploads/video.mp4',
+    }, { user: { id: 1 } });
+
+    expect(client.article.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ videoUrl: 'http://localhost:3000/uploads/video.mp4' }),
+    }));
+    expect(adminArticle(result).videoUrl).toBe('http://localhost:3000/uploads/video.mp4');
+  });
+
   test('update replaces tags through the transaction client', async () => {
     mockPrisma.article.findUnique.mockResolvedValue({ id: 9, slug: 'story', title: 'Story' });
     const client = tagClient([{ id: 2, name: 'replacement' }]);

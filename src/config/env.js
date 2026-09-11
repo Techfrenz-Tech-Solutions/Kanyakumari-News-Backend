@@ -52,6 +52,7 @@ const env = {
   PUBLIC_UPLOAD_URL: (process.env.PUBLIC_UPLOAD_URL || `http://localhost:${int(process.env.PORT, 3000)}/uploads`).replace(/\/$/, ''),
   MAX_IMAGE_UPLOAD_MB: int(process.env.MAX_IMAGE_UPLOAD_MB, 5),
   MAX_PDF_UPLOAD_MB: int(process.env.MAX_PDF_UPLOAD_MB, 20),
+  MAX_VIDEO_UPLOAD_MB: int(process.env.MAX_VIDEO_UPLOAD_MB, 50),
   THUMBNAIL_WIDTH: int(process.env.THUMBNAIL_WIDTH, 640),
 
   SMTP_HOST: process.env.SMTP_HOST || '',

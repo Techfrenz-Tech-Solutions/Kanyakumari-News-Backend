@@ -6,7 +6,7 @@
  *
  * We intentionally use memory (not disk) storage so that untrusted/invalid
  * bytes never touch the public uploads directory. For very large uploads you
- * could swap to disk storage, but for 5MB images / 20MB PDFs memory is safe.
+ * could swap to disk storage, but current media limits remain memory-safe.
  */
 const multer = require('multer');
 const env = require('../config/env');
@@ -15,7 +15,7 @@ const { ApiErrors } = require('../utils/apiError');
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: Math.max(env.MAX_IMAGE_UPLOAD_MB, env.MAX_PDF_UPLOAD_MB) * 1024 * 1024,
+    fileSize: Math.max(env.MAX_IMAGE_UPLOAD_MB, env.MAX_PDF_UPLOAD_MB, env.MAX_VIDEO_UPLOAD_MB) * 1024 * 1024,
     files: 20,
   },
 });
