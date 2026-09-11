@@ -4,9 +4,13 @@ const express = require('express');
 const request = require('supertest');
 
 const mockPrisma = {
-  category: { findUnique: jest.fn() },
+  category: { findUnique: jest.fn(), findMany: jest.fn() },
+  area: { findMany: jest.fn() },
   article: { findMany: jest.fn(), count: jest.fn() },
+  articleView: { groupBy: jest.fn() },
+  advertisement: { findMany: jest.fn() },
   gallery: { findMany: jest.fn() },
+  siteSettings: { findUnique: jest.fn() },
 };
 
 jest.mock('../../src/config/prisma', () => mockPrisma);
@@ -47,6 +51,7 @@ function appFor(path, handler) {
 
 describe('public search contract', () => {
   beforeEach(() => {
+    jest.clearAllMocks();
     mockPrisma.category.findUnique.mockResolvedValue({ id: 7 });
     mockPrisma.article.count.mockResolvedValue(0);
   });
@@ -101,6 +106,38 @@ describe('public search contract', () => {
       .query({ q: 'x'.repeat(201) });
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe('BAD_REQUEST');
+  });
+});
+
+describe('public home contract', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockPrisma.article.count.mockResolvedValue(12);
+    mockPrisma.category.findMany.mockResolvedValue([]);
+    mockPrisma.area.findMany.mockResolvedValue([]);
+    mockPrisma.advertisement.findMany.mockResolvedValue([]);
+    mockPrisma.siteSettings.findUnique.mockResolvedValue(null);
+    mockPrisma.articleView.groupBy.mockResolvedValue([]);
+  });
+
+  test('returns all breaking articles for hero and breaking homepage sections', async () => {
+    const breakingRows = [article(1, 'Breaking 1'), article(2, 'Breaking 2')].map((row) => ({
+      ...row,
+      isBreaking: true,
+    }));
+
+    mockPrisma.article.findMany
+      .mockResolvedValueOnce(breakingRows)
+      .mockResolvedValueOnce(breakingRows)
+      .mockResolvedValueOnce([article(3)]);
+
+    const response = await request(appFor('/api/home', controller.home)).get('/api/home');
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.hero).toHaveLength(2);
+    expect(response.body.data.breaking).toHaveLength(2);
+    expect(mockPrisma.article.findMany).toHaveBeenNthCalledWith(1, expect.not.objectContaining({ take: expect.any(Number) }));
+    expect(mockPrisma.article.findMany).toHaveBeenNthCalledWith(2, expect.not.objectContaining({ take: expect.any(Number) }));
   });
 });
 

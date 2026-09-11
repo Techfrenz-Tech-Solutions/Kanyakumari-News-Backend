@@ -56,13 +56,11 @@ const home = asyncHandler(async (req, res) => {
       prisma.article.findMany({
         where: { ...scope, isBreaking: true },
         orderBy: { publishedAt: 'desc' },
-        take: 5,
         include: articleService.LIST_INCLUDE,
       }),
       prisma.article.findMany({
         where: { ...scope, isBreaking: true },
         orderBy: { publishedAt: 'desc' },
-        take: 8,
         include: articleService.LIST_INCLUDE,
       }),
       prisma.article.findMany({
@@ -116,7 +114,6 @@ const hero = asyncHandler(async (req, res) => {
   const rows = await prisma.article.findMany({
     where: { ...scope, isBreaking: true },
     orderBy: { publishedAt: 'desc' },
-    take: 5,
     include: articleService.LIST_INCLUDE,
   });
   res.json({ success: true, data: rows.map(publicArticleSummary) });
@@ -128,7 +125,6 @@ const breaking = asyncHandler(async (req, res) => {
   const rows = await prisma.article.findMany({
     where: { ...publicScope(), isBreaking: true },
     orderBy: { publishedAt: 'desc' },
-    take: 10,
     include: articleService.LIST_INCLUDE,
   });
   res.json({ success: true, data: rows.map(publicArticleSummary) });
