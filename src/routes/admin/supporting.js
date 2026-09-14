@@ -899,6 +899,46 @@ const ePapers = {
 
 // ═══════════════════════ SITE SETTINGS ═══════════════════════
 
+// Admin ContactUs page fields (Kanyakumari-Admin-Panel src/pages/ContactUs.jsx,
+// production f3d0d38). The UI explicitly documents mapEmbedUrl as a Google
+// Maps embed URL ("Google Maps → Share → Embed a map"), so it is validated
+// as https + google.com host + /maps/ path. whatsapp is a click-to-chat
+// phone number (wa.me/<digits>?text=...), not a URL.
+const googleMapsEmbedUrl = z
+  .string()
+  .trim()
+  .max(2083)
+  .refine((v) => {
+    let u;
+    try {
+      u = new URL(v);
+    } catch {
+      return false;
+    }
+    if (u.protocol !== 'https:') return false;
+    const host = u.hostname.toLowerCase();
+    if (host !== 'google.com' && !host.endsWith('.google.com')) return false;
+    return u.pathname.startsWith('/maps/');
+  }, 'mapEmbedUrl must be a Google Maps embed URL (https://…google.com/maps/…)');
+
+const contactInfoSchema = z
+  .object({
+    officeName: z.string().trim().max(200).optional().nullable(),
+    address: z.string().trim().max(500).optional().nullable(),
+    city: z.string().trim().max(120).optional().nullable(),
+    state: z.string().trim().max(120).optional().nullable(),
+    pincode: z.string().trim().max(20).optional().nullable(),
+    phone: z.string().trim().max(40).optional().nullable(),
+    altPhone: z.string().trim().max(40).optional().nullable(),
+    email: z.string().trim().email().max(190).optional().nullable(),
+    supportEmail: z.string().trim().email().max(190).optional().nullable(),
+    website: z.string().trim().url().max(300).optional().nullable(),
+    mapEmbedUrl: googleMapsEmbedUrl.optional().nullable(),
+    whatsapp: z.string().trim().max(40).optional().nullable(),
+    workingHours: z.string().trim().max(200).optional().nullable(),
+  })
+  .strict();
+
 const settingsUpdate = z.object({
   siteName: z.string().trim().min(1).max(120).optional(),
   tagline: z.string().trim().max(255).optional().nullable(),
@@ -913,6 +953,13 @@ const settingsUpdate = z.object({
   socialTwitter: z.string().trim().url().max(300).optional().nullable(),
   socialInstagram: z.string().trim().url().max(300).optional().nullable(),
   socialYoutube: z.string().trim().url().max(300).optional().nullable(),
+  socialTelegram: z.string().trim().url().max(300).optional().nullable(),
+  socialWhatsapp: z.string().trim().url().max(300).optional().nullable(),
+  socialGooglenews: z.string().trim().url().max(300).optional().nullable(),
+  // Admin ContactUs page office/contact configuration (13-field form).
+  // Stored as JSON on SiteSettings.contactInfo; only whitelisted keys are
+  // accepted. null clears the stored object.
+  contactInfo: contactInfoSchema.optional().nullable(),
 });
 
 function settingsDto(row) {
@@ -933,6 +980,10 @@ function settingsDto(row) {
     socialTwitter: row.socialTwitter,
     socialInstagram: row.socialInstagram,
     socialYoutube: row.socialYoutube,
+    socialTelegram: row.socialTelegram,
+    socialWhatsapp: row.socialWhatsapp,
+    socialGooglenews: row.socialGooglenews,
+    contactInfo: row.contactInfo ?? null,
     updatedAt: row.updatedAt ? row.updatedAt.toISOString() : null,
   };
 }
@@ -1203,4 +1254,6 @@ module.exports = {
   activityLogs,
   normalizeAdPosition,
   parseVideoUrl,
+  settingsUpdate,
+  contactInfoSchema,
 };

@@ -624,7 +624,14 @@ function publicSettingsDto(row) {
       twitter: row.socialTwitter,
       instagram: row.socialInstagram,
       youtube: row.socialYoutube,
+      telegram: row.socialTelegram,
+      whatsapp: row.socialWhatsapp,
+      googlenews: row.socialGooglenews,
     },
+    // Office/contact configuration from the Admin ContactUs page. Written
+    // through a strict 13-key whitelist (contactInfoSchema) so the stored
+    // object contains only public-safe fields; exposed as-is or null.
+    contactInfo: row.contactInfo ?? null,
   };
 }
 

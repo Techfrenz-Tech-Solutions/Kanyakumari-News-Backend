@@ -154,13 +154,64 @@ async function resetPassword({ token, newPassword }) {
   return { ok: true };
 }
 
+/**
+ * Resolve profile-update avatar inputs to a User.avatarId value.
+ *
+ * - both omitted            → {} (no avatar change)
+ * - avatar === null/''      → clears the avatar
+ * - avatar === "<media url>" → resolved to the internal Media row by exact url;
+ *                              no matching Media row → 400 AVATAR_NOT_FOUND
+ * - avatarId given          → the referenced Media row must exist (same
+ *                              convention as reporter avatar validation)
+ * - both given              → both must resolve to the same Media row,
+ *                              otherwise 400 AVATAR_CONFLICT
+ *
+ * We persist the Media relation (avatarId), never a raw external URL, so the
+ * toPublicUser() → user.avatar.url flow stays internally consistent.
+ */
+async function resolveAvatarRef({ avatar, avatarId }) {
+  const hasUrl = avatar !== undefined;
+  const hasId = avatarId !== undefined;
+  if (!hasUrl && !hasId) return {};
+
+  let resolvedUrl = null;
+  if (hasUrl) {
+    if (avatar === null || avatar === '') {
+      resolvedUrl = null; // explicit clear
+    } else {
+      const media = await prisma.media.findFirst({ where: { url: avatar }, select: { id: true } });
+      if (!media) throw ApiErrors.badRequest('Avatar media not found on this server', 'AVATAR_NOT_FOUND');
+      resolvedUrl = media.id;
+    }
+  }
+
+  let resolvedId = null;
+  if (hasId) {
+    if (avatarId === null) {
+      resolvedId = null; // explicit clear
+    } else {
+      const media = await prisma.media.findUnique({ where: { id: avatarId }, select: { id: true } });
+      if (!media) throw ApiErrors.badRequest('Avatar media not found', 'AVATAR_NOT_FOUND');
+      resolvedId = media.id;
+    }
+  }
+
+  if (hasUrl && hasId && resolvedUrl !== resolvedId) {
+    throw ApiErrors.badRequest('avatar and avatarId refer to different media', 'AVATAR_CONFLICT');
+  }
+
+  return { avatarId: hasUrl ? resolvedUrl : resolvedId };
+}
+
 async function updateProfile(req, data) {
+  const avatarData = await resolveAvatarRef({ avatar: data.avatar, avatarId: data.avatarId });
   const user = await prisma.user.update({
     where: { id: req.user.id },
     data: {
       ...(data.name !== undefined ? { name: data.name } : {}),
       ...(data.phone !== undefined ? { phone: data.phone } : {}),
       ...(data.bio !== undefined ? { bio: data.bio } : {}),
+      ...avatarData,
     },
     include: { avatar: true },
   });

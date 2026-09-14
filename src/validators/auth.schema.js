@@ -30,6 +30,11 @@ const updateProfileSchema = z
     name: z.string().trim().min(1).max(120),
     phone: z.string().trim().max(30).optional().nullable(),
     bio: z.string().trim().max(5000).optional().nullable(),
+    avatarId: z.number().int().positive().optional().nullable(),
+    // Media URL string (admin Profile uploads via POST /api/admin/upload and
+    // submits the returned url). Resolved to the internal Media row in
+    // authService.updateProfile; empty/whitespace-only clears the avatar.
+    avatar: z.string().trim().max(2083).optional().nullable(),
   })
   .partial();
 
