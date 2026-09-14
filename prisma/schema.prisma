@@ -698,6 +698,10 @@ model SiteSettings {
   socialTwitter   String? @map("social_twitter") @db.VarChar(300)
   socialInstagram String? @map("social_instagram") @db.VarChar(300)
   socialYoutube   String? @map("social_youtube") @db.VarChar(300)
+  socialTelegram   String? @map("social_telegram")   @db.VarChar(300)
+  socialWhatsapp   String? @map("social_whatsapp")   @db.VarChar(300)
+  socialGooglenews String? @map("social_googlenews") @db.VarChar(300)
+  contactInfo      Json?   @map("contact_info")
   // Static reference data (taluks, govt offices, helplines, transport)
   // seeded from the public frontend — served by GET /api/district-info.
   districtInfo    Json?     @map("district_info")
