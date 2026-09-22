@@ -5,6 +5,7 @@ const request = require('supertest');
 
 const mockPrisma = {
   category: { findUnique: jest.fn(), findMany: jest.fn() },
+  subcategory: { findFirst: jest.fn() },
   area: { findMany: jest.fn() },
   article: { findMany: jest.fn(), count: jest.fn() },
   articleView: { groupBy: jest.fn() },
@@ -106,6 +107,43 @@ describe('public search contract', () => {
       .query({ q: 'x'.repeat(201) });
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe('BAD_REQUEST');
+  });
+});
+
+describe('public category list contract', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockPrisma.category.findUnique.mockResolvedValue({ id: 7 });
+    mockPrisma.subcategory.findFirst.mockResolvedValue({ id: 11 });
+    mockPrisma.article.findMany.mockResolvedValue([article(1)]);
+    mockPrisma.article.count.mockResolvedValue(1);
+  });
+
+  test('subcategory filters resolve within the selected parent category', async () => {
+    const response = await request(appFor('/api/news', controller.newsList))
+      .get('/api/news')
+      .query({ category: 'tamil-nadu', subcategory: 'test2', pageSize: 6 });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ success: true, data: { total: 1 } });
+    expect(mockPrisma.subcategory.findFirst).toHaveBeenCalledWith({
+      where: { slug: 'test2', parentCategoryId: 7 },
+    });
+    expect(mockPrisma.article.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ categoryId: 7, subcategoryId: 11 }),
+    }));
+  });
+
+  test('unknown subcategories return an empty list instead of a server error', async () => {
+    mockPrisma.subcategory.findFirst.mockResolvedValue(null);
+
+    const response = await request(appFor('/api/news', controller.newsList))
+      .get('/api/news')
+      .query({ category: 'tamil-nadu', subcategory: 'missing' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ success: true, data: { items: [], hasMore: false, total: 0 } });
+    expect(mockPrisma.article.findMany).not.toHaveBeenCalled();
   });
 });
 

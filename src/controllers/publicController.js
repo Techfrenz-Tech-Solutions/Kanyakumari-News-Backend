@@ -151,7 +151,9 @@ const newsList = asyncHandler(async (req, res) => {
     scope.areaId = area.id;
   }
   if (req.query.subcategory) {
-    const subcategory = await prisma.subcategory.findUnique({ where: { slug: req.query.subcategory } });
+    const subcategory = await prisma.subcategory.findFirst({
+      where: { slug: req.query.subcategory, ...(scope.categoryId ? { parentCategoryId: scope.categoryId } : {}) },
+    });
     if (!subcategory) {
       res.json({ success: true, data: { items: [], hasMore: false, total: 0 } });
       return;
