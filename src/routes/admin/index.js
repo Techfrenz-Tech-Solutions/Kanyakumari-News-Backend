@@ -167,6 +167,11 @@ router.delete('/e-papers/:id', requirePermission('media', 'delete'), supporting.
 router.get('/settings', requirePermission('settings', 'view'), supporting.settings.get);
 router.put('/settings', requirePermission('settings', 'edit'), supporting.settings.update);
 
+// Contact submissions
+router.get('/contact-submissions', requirePermission('settings', 'view'), supporting.contactSubmissions.list);
+router.put('/contact-submissions/:id/status', requirePermission('settings', 'edit'), supporting.contactSubmissions.updateStatus);
+router.delete('/contact-submissions/:id', requirePermission('settings', 'edit'), supporting.contactSubmissions.remove);
+
 // Dashboard / analytics / activity logs
 router.get('/dashboard/stats', requirePermission('news', 'view'), supporting.dashboardStats);
 router.get('/analytics/top-articles', requirePermission('news', 'view'), supporting.topArticles);

@@ -5,7 +5,7 @@ const mediaService = require('../../services/mediaService');
 
 const upload = asyncHandler(async (req, res) => {
   const { buffer, originalname, size } = req.file;
-  const kind = (req.body && req.body.kind) || null; // optional: 'image' | 'pdf'
+  const kind = (req.body && req.body.kind) || null; // optional: 'image' | 'pdf' | 'video'
   const row = await mediaService.processUpload(buffer, originalname, size, {
     kind,
     userId: req.user.id,

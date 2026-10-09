@@ -66,10 +66,10 @@ const publicContentLimiter = rateLimit({
   skip: testSkip,
 });
 
-/** Contact form — aggressive. */
+/** Contact form. */
 const contactLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  limit: 3,
+  limit: 30,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   keyGenerator: (req) => clientIp(req),

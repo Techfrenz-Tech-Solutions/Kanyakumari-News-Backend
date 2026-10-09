@@ -673,6 +673,7 @@ model ContactSubmission {
   id        Int      @id @default(autoincrement())
   name      String   @db.VarChar(120)
   email     String   @db.VarChar(190)
+  phone     String?  @db.VarChar(40)
   subject   String?  @db.VarChar(200)
   message   String   @db.Text
   status    String   @default("new") @db.VarChar(20) // new | emailed

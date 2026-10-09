@@ -1012,6 +1012,75 @@ const settings = {
   }),
 };
 
+// ═══════════════════════ CONTACT SUBMISSIONS ═══════════════════════
+
+const CONTACT_STATUSES = ['unread', 'read', 'replied', 'new', 'emailed'];
+const CONTACT_STATUS_TO_ADMIN = { new: 'unread', emailed: 'replied' };
+const CONTACT_STATUS_TO_DB = { unread: 'unread', read: 'read', replied: 'replied' };
+
+const contactStatusUpdate = z.object({
+  status: z.enum(['unread', 'read', 'replied']),
+});
+
+function contactSubmissionDto(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    phone: row.phone || '',
+    subject: row.subject || 'General Enquiry',
+    message: row.message,
+    status: CONTACT_STATUS_TO_ADMIN[row.status] || row.status || 'unread',
+    createdAt: row.createdAt ? row.createdAt.toISOString() : null,
+  };
+}
+
+const contactSubmissions = {
+  list: asyncHandler(async (req, res) => {
+    const { page, limit, skip } = pageOf(req, 50);
+    const where = {};
+    if (req.query.status && req.query.status !== 'all') {
+      const status = String(req.query.status).trim();
+      if (!CONTACT_STATUSES.includes(status)) throw ApiErrors.badRequest('Unsupported contact status');
+      where.status = status === 'unread' ? { in: ['unread', 'new'] } : status === 'replied' ? { in: ['replied', 'emailed'] } : status;
+    }
+    if (req.query.q) {
+      const q = String(req.query.q).trim();
+      where.OR = [
+        { name: { contains: q } },
+        { email: { contains: q } },
+        { phone: { contains: q } },
+        { subject: { contains: q } },
+        { message: { contains: q } },
+      ];
+    }
+    const [items, total] = await Promise.all([
+      prisma.contactSubmission.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
+      prisma.contactSubmission.count({ where }),
+    ]);
+    res.json({ success: true, data: { items: items.map(contactSubmissionDto), total, ...paginationMeta(total, page, limit) } });
+  }),
+
+  updateStatus: asyncHandler(async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const existing = await prisma.contactSubmission.findUnique({ where: { id } });
+    if (!existing) throw ApiErrors.notFound('Contact enquiry not found');
+    const { status } = contactStatusUpdate.parse(req.body);
+    const row = await prisma.contactSubmission.update({ where: { id }, data: { status: CONTACT_STATUS_TO_DB[status] } });
+    await logActivity({ req, userId: req.user.id, action: `contact.${status}`, module: 'contact', record: String(id) });
+    res.json({ success: true, data: contactSubmissionDto(row) });
+  }),
+
+  remove: asyncHandler(async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const existing = await prisma.contactSubmission.findUnique({ where: { id } });
+    if (!existing) throw ApiErrors.notFound('Contact enquiry not found');
+    await prisma.contactSubmission.delete({ where: { id } });
+    await logActivity({ req, userId: req.user.id, action: 'contact.deleted', module: 'contact', record: String(id) });
+    res.json({ success: true, data: { ok: true } });
+  }),
+};
+
 // ═══════════════════════ DASHBOARD / ANALYTICS ═══════════════════════
 
 function periodStart(range) {
@@ -1249,6 +1318,7 @@ module.exports = {
   attractions,
   ePapers,
   settings,
+  contactSubmissions,
   dashboardStats,
   topArticles,
   activityLogs,

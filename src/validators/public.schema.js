@@ -30,8 +30,9 @@ const commentCreateSchema = z.object({
 const contactSchema = z.object({
   name: z.string().trim().min(1).max(120),
   email: emailSchema,
+  phone: z.string().trim().max(40).optional().nullable(),
   subject: z.string().trim().max(200).optional().nullable(),
-  message: z.string().trim().min(5).max(5000),
+  message: z.string().trim().min(1).max(5000),
 });
 
 module.exports = {

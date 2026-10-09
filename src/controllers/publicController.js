@@ -514,7 +514,9 @@ const marketRates = asyncHandler(async (req, res) => {
  * Maps newsService.getJobs({ type }) -> plain array
  */
 const jobs = asyncHandler(async (req, res) => {
-  const where = { status: 'active', lastDate: { gte: new Date() } };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const where = { status: 'active', lastDate: { gte: today } };
   if (req.query.type) where.type = req.query.type;
   const rows = await prisma.jobListing.findMany({ where, orderBy: { lastDate: 'desc' } });
   res.json({
@@ -694,14 +696,14 @@ const commentsPublic = asyncHandler(async (req, res) => {
 // ══════════════════════════ CONTACT ══════════════════════════
 
 const contact = asyncHandler(async (req, res) => {
-  const { name, email, subject, message } = require('../validators/public.schema').contactSchema.parse(req.body);
+  const { name, email, phone, subject, message } = require('../validators/public.schema').contactSchema.parse(req.body);
   await prisma.contactSubmission.create({
-    data: { name, email, subject: subject || null, message },
+    data: { name, email, phone: phone || null, subject: subject || null, message, status: 'unread' },
   });
   const mail = await mailService.send({
     to: env.CONTACT_RECIPIENT,
     subject: `[Contact] ${subject || name}`,
-    text: `From: ${name} <${email}>\n\n${message}`,
+    text: `From: ${name} <${email}>${phone ? `\nPhone: ${phone}` : ''}\n\n${message}`,
   });
   res.json({
     success: true,
